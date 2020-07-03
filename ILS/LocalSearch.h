@@ -70,8 +70,21 @@ private:
 	bool move7(); // If route(U) == route(V), replace (U,X) and (V,Y) by (U,V) and (X,Y)
 	bool move8(); // If route(U) != route(V), replace (U,X) and (V,Y) by (U,V) and (X,Y)
 
+	// Intra Route Moves
+	bool reinsertion();
+	bool oropt2();
+	bool oropt3();
+
+	// Inter Route Moves
+	bool shift10();
+	bool shift20();
+	bool shift30();
+
+	
 	/* ROUTINES TO UPDATE THE DATA STUCTURES REPRESENTING THE SOLUTIONS */
 	static void insertNode(Node * U, Node * V);			// Solution update: Insert U after V
+	static void insertNode2(Node* U, Node* V);			// Solution update: Insert U and its next node after V
+	static void insertNode3(Node* U, Node* V);			// Solution update: Insert U and its two next nodes after V
 	static void swapNode(Node * U, Node * V) ;			// Solution update: Swap U and V							   
 	void updateRouteData(Route * myRoute);	// Updates the preprocessed data of a route
 
@@ -89,7 +102,8 @@ private:
 	// Run the local search on a given solution
 	void runTests(Solution& mySol, std::string exportFile);
 	void exportTestToFile(std::vector < std::string > & results, std::string exportFile);
-	void routesToString(std::vector < std::string > & results);
+	void routesToString(std::string header, std::vector < std::string >& results);
+	void prepareNodes(int nudeIdU, int nudeIdV);
 
 	// Constructor
 	LocalSearch(Params * params);

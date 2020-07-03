@@ -67,6 +67,9 @@ Params::Params(std::string pathToInstance, int seedRNG): seed(seedRNG)
 			distanceMatrix[i][j] = d;
 		}
 	}
+
+	// Test Routine
+	testRoutine = false;
 }
 
 void Params::setMethodParams()

@@ -1,5 +1,4 @@
 #include "LocalSearch.h" 
-
 // ----------------------------------------------------------------------------------
 // This first segment is here to test route operations
 
@@ -8,49 +7,114 @@ void LocalSearch::runTests(Solution& mySol, std::string exportFile)
 {
 	loadSolution(mySol);
 	std::vector < std::string > results = std::vector < std::string >();
+	params->testRoutine = true;
 
 	// Save the state of the given solution
-	results.push_back("Initial State: ");
-	routesToString(results);
-	results.push_back(" ");
+	routesToString("Initial State: ", results);
 
-	// Make move
-	nodeU = &clients[1];
-	setLocalVariablesRouteU();
+	// ---------------------------- Inter-Route Moves
+	results.push_back("Inter-Route Moves ------------------------------------------------");
+	results.push_back("");
 
-	nodeV = &clients[2];
-	setLocalVariablesRouteV();
+	// Shift (1,0)
+	prepareNodes(1, 7);
+	shift10();
+	routesToString("Shift(1,0), 1 to 7: ", results);
+
+	// Shift (2,0)
+	prepareNodes(7, 2);
+	shift20();
+	routesToString("Shift(2,0), 7 to 2: ", results);
+
+	// Shift (3,0)
+	prepareNodes(2, 9);
+	shift30();
+	routesToString("Shift(3,0), 2 to 9: ", results);
+
+	// Swap (1,1)
+	prepareNodes(5, 9);
 	move4();
+	routesToString("Swap(1,1): 5 to 9 ", results);
 
-	swapNode(nodeU, nodeV);
-	//updateRouteData(routeU);
-	//if (routeU != routeV) updateRouteData(routeV);
+	// ---------------------------- Intra-Route Moves
+	results.push_back("Intra-Route Moves ------------------------------------------------");
+	results.push_back("");
 
-	results.push_back("New State: ");
-	routesToString(results);
-	results.push_back(" ");
+	// Reinsertion
+	prepareNodes(8, 10);
+	reinsertion();
+	routesToString("Reinsertion, 8 to 10: ", results);
 
-	// Export to external file
+	// Or-Opt2
+	prepareNodes(1, 2);
+	oropt2();
+	routesToString("Or-Opt2, 1 to 2: ", results);
+
+	// Or-Opt3
+	prepareNodes(5, 7);
+	oropt3();
+	routesToString("Or-Opt3, 5 to 7: ", results);
+
+	// ---------------------------- Export to external file
 	exportTestToFile(results, exportFile);
 }
 
-void LocalSearch::routesToString(std::vector < std::string > & results)
+void LocalSearch::prepareNodes(int nudeIdU, int nudeIdV)
 {
+	nodeU = &clients[nudeIdU];
+	setLocalVariablesRouteU();
+
+	nodeV = &clients[nudeIdV];
+	setLocalVariablesRouteV();
+}
+
+void LocalSearch::routesToString(std::string header, std::vector < std::string > & results)
+{
+	results.push_back(header);
+	double totalCost = 0;
+	std::string costString = "";
+
 	for (int r = 0; r < params->nbVehicles; r++)
 	{
-		std::string routeString = std::to_string(r+1) + ": 0";
+		// Clients visited
+		std::string routeString = "R" + std::to_string(r+1) + ": 0";
 
 		Node* node = depots[r].next;
+		double routeCost = params->distanceMatrix[node->prev->cour][node->cour];
 		while (!node->isDepot)
 		{
 			routeString += " " + std::to_string(node->cour);
-			
+			routeCost += params->distanceMatrix[node->cour][node->next->cour];
 			node = node->next;
 		}
-		routeString += " 0";
+		routeString += " 0 ";
 
+		// Attach more info ( Cost and Load )
+		routeString += "\t[";
+
+		costString = std::to_string(routeCost);
+		costString = costString.substr(0, costString.find(".") + 3);
+		routeString += "cost: " + costString;
+		
+		costString = std::to_string(node->route->load);
+		costString = costString.substr(0, costString.find(".") + 0);
+		routeString += "  \tload: " + costString;
+
+		routeString += "]";
+
+		// Route cost
 		results.push_back(routeString);
+
+		// Update total cost
+		totalCost += routeCost;
 	}
+
+	// Register Total Cost
+	costString = std::to_string(totalCost);
+	costString = costString.substr(0, costString.find(".") + 3);
+	results.push_back("Total Cost: " + costString);
+
+	results.push_back("");
 }
 
 void LocalSearch::exportTestToFile(std::vector < std::string > & results, std::string exportFile)
@@ -165,7 +229,40 @@ void LocalSearch::insertNode(Node * U, Node * V)
 	U->prev = V;
 	U->next = V->next;
 	V->next = U;
+
 	U->route = V->route;
+}
+
+void LocalSearch::insertNode2(Node* U, Node* V)
+{
+	Node* X = U->next;
+
+	U->prev->next = X->next;
+	X->next->prev = U->prev;
+	V->next->prev = X;
+	U->prev = V;
+	X->next = V->next;
+	V->next = U;
+
+	U->route = V->route;
+	X->route = V->route;
+}
+
+void LocalSearch::insertNode3(Node* U, Node* V)
+{
+	Node* X = U->next;
+	Node* W = X->next;
+
+	U->prev->next = W->next;
+	W->next->prev = U->prev;
+	V->next->prev = W;
+	U->prev = V;
+	W->next = V->next;
+	V->next = U;
+
+	U->route = V->route;
+	X->route = V->route;
+	W->route = V->route;
 }
 
 void LocalSearch::swapNode(Node * U, Node * V)
@@ -191,6 +288,145 @@ void LocalSearch::swapNode(Node * U, Node * V)
 	V->route = myRouteU;
 }
 
+// --------------------------------------------------- MOVES
+// Insert given Node U and its next Node X after the given Node V
+bool LocalSearch::shift10()
+{
+	// Check if the move is valid
+	if (nodeUCour == nodeYCour) return false;
+
+	// Costs calculations
+		// Route U
+		double costUPredX = params->distanceMatrix[nodeUPredCour][nodeXCour];
+		double costUPredU = params->distanceMatrix[nodeUPredCour][nodeUCour];
+		double costUX = params->distanceMatrix[nodeUCour][nodeXCour];
+
+		double routeUGain = costUPredX;
+		double routeULoss = costUPredU + costUX;
+		double routeUBalance = routeUGain - routeULoss;
+
+		// Route V
+		double costVY = params->distanceMatrix[nodeVCour][nodeYCour];
+		double costVU = params->distanceMatrix[nodeVCour][nodeUCour];
+		double costUY = params->distanceMatrix[nodeUCour][nodeYCour];
+
+		double routeVGain = costVU + costUY;
+		double routeVLoss = costVY;
+		double routeVBalance = routeVGain - routeVLoss;
+		
+
+	// Check if the move is worth
+	if (routeUBalance + routeVBalance > -MY_EPSILON && params->testRoutine == false) return false;
+	// TODO: Check LOAD
+
+	// Make the move
+	insertNode(nodeU, nodeV);
+	updateRouteData(routeU);
+	if (routeU != routeV) updateRouteData(routeV);
+	return true;
+}
+
+// Insert given Node U and its next Node X after the given Node V
+bool LocalSearch::shift20()
+{
+	// Check if the move is valid
+	if (nodeUCour == nodeYCour) return false;
+	if (nodeU->next->isDepot) return false;
+
+	// Costs calculations
+		// Route U
+		int nodePostXCour = nodeX->next->cour;
+		double costPredUU = params->distanceMatrix[nodeUPredCour][nodeUCour];
+		double costUX = params->distanceMatrix[nodeUCour][nodeXCour];
+		double costXPostX = params->distanceMatrix[nodeXCour][nodePostXCour];
+		double costPredUPostX = params->distanceMatrix[nodeUPredCour][nodePostXCour];
+
+		double routeUGain = costPredUPostX;
+		double routeULoss = costPredUU + costUX + costXPostX;
+		double routeUBalance = routeUGain - routeULoss;
+
+		// Rooute V
+		double costVY = params->distanceMatrix[nodeVCour][nodeYCour];
+		double costVU = params->distanceMatrix[nodeVCour][nodeUCour];
+		double costXY = params->distanceMatrix[nodeXCour][nodeYCour];
+
+		double routeVGain = costVU + costUX + costXY;
+		double routeVLoss = costVY;
+		double routeVBalance = routeVGain - routeVLoss;
+
+	// Check if the move is worth
+	if (routeVBalance + routeUBalance > -MY_EPSILON && params->testRoutine == false) return false;
+	// TODO: Check LOAD
+
+	// Make the move
+	insertNode2(nodeU, nodeV);
+	updateRouteData(routeU);
+	if (routeU != routeV) updateRouteData(routeV);
+	return true;
+}
+
+// Insert given Node U and its two next Nodes X and W after the given Node V
+bool LocalSearch::shift30()
+{
+	// Check if the move is valid
+	if (nodeUCour == nodeYCour) return false;
+	if (nodeU->next->isDepot) return false;
+	if (nodeU->next->next->isDepot) return false;
+
+	// Costs calculations
+		// Node W = Node X -> Next ( the last node on string to be transfered )
+
+		// Route U
+		int nodeWCour = nodeX->next->cour;
+		int nodePostWCour = nodeX->next->next->cour;
+		double costPredUU = params->distanceMatrix[nodeUPredCour][nodeUCour];
+		double costUX = params->distanceMatrix[nodeUCour][nodeXCour];
+		double costXW = params->distanceMatrix[nodeXCour][nodeWCour];
+		double costWPostW = params->distanceMatrix[nodeWCour][nodePostWCour];
+		double costPredUPostW = params->distanceMatrix[nodeUPredCour][nodePostWCour];
+
+		double routeUGain = costPredUPostW;
+		double routeULoss = costPredUU + costUX + costXW + costWPostW;
+		double routeUBalance = routeUGain - routeULoss;
+
+		// Rooute V
+		double costVY = params->distanceMatrix[nodeVCour][nodeYCour];
+		double costVU = params->distanceMatrix[nodeVCour][nodeUCour];
+		double costWY = params->distanceMatrix[nodeWCour][nodeYCour];
+
+		double routeVGain = costVU + costUX + costXW + costWY;
+		double routeVLoss = costVY;
+		double routeVBalance = routeVGain - routeVLoss;
+
+	// Check if the move is worth
+	if (routeVBalance + routeUBalance > -MY_EPSILON && params->testRoutine == false) return false;
+	// TODO: Check LOAD
+
+	// Make the move
+	insertNode3(nodeU, nodeV);
+	updateRouteData(routeU);
+	if (routeU != routeV) updateRouteData(routeV);
+	return true;
+}
+
+// ------
+
+bool LocalSearch::reinsertion()
+{
+	return shift10();
+}
+
+bool LocalSearch::oropt2()
+{
+	return shift20();
+}
+
+bool LocalSearch::oropt3()
+{
+	return shift30();
+}
+
+// -------------------
 bool LocalSearch::move1()
 {
 	double costSuppU = params->distanceMatrix[nodeUPredCour][nodeXCour] - params->distanceMatrix[nodeUPredCour][nodeUCour] - params->distanceMatrix[nodeUCour][nodeXCour];

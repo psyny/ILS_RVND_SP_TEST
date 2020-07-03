@@ -46,6 +46,9 @@ public:
 	std::vector < Client > clients ;							// Vector containing information on each customer -- clients[0] is the depot -- clients[i] for i in 1...nbClients are the customers 
 	std::vector < std::vector < double > > distanceMatrix ;		// Distance matrix
 
+	/* TESTING */
+	bool testRoutine;
+
 	/* PARSING ROUTINES */
 
 	// Setting the parameters of the method
