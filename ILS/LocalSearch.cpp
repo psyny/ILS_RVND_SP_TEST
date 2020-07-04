@@ -33,8 +33,18 @@ void LocalSearch::runTests(Solution& mySol, std::string exportFile)
 
 	// Swap (1,1)
 	prepareNodes(5, 9);
-	move4();
+	swap11();
 	routesToString("Swap(1,1): 5 to 9 ", results);
+
+	// Swap (2,1)
+	prepareNodes(4, 7);
+	swap21();
+	routesToString("Swap(2,1): 4 to 7 ", results);
+
+	// Swap (2,2)
+	prepareNodes(4, 7);
+	swap22();
+	routesToString("Swap(2,2): 4 to 7 ", results);
 
 	// ---------------------------- Intra-Route Moves
 	results.push_back("Intra-Route Moves ------------------------------------------------");
@@ -288,12 +298,74 @@ void LocalSearch::swapNode(Node * U, Node * V)
 	V->route = myRouteU;
 }
 
+void LocalSearch::swapNode2(Node* U, Node* V)
+{
+	// Other related nodes
+	Node* X = U->next;
+
+	// Saving infos
+	Node* Vprev = V->prev;
+	Node* Vnext = V->next;
+	Route* RU = U->route;
+	Route* RV = V->route;
+
+	// Switching references
+	V->prev = U->prev;
+	U->prev->next = V;
+	V->next = X->next;
+	X->next->prev = V;
+
+	U->prev = Vprev;
+	Vprev->next = U;
+	X->next = Vnext;
+	Vnext->prev = X;
+
+	// Updading routes
+	U->route = RV;
+	X->route = RV;
+	V->route = RU;
+}
+
+void LocalSearch::swapNode22(Node* U, Node* V)
+{
+	// Other related nodes
+	Node* X = U->next;
+	Node* Y = V->next;
+
+	// Saving infos
+	Node* Vprev = V->prev;
+	Node* Ynext = Y->next;
+	Route* RU = U->route;
+	Route* RV = V->route;
+
+	// Switching references
+	V->prev = U->prev;
+	U->prev->next = V;
+	Y->next = X->next;
+	X->next->prev = Y;
+
+	U->prev = Vprev;
+	Vprev->next = U;
+	X->next = Ynext;
+	Ynext->prev = X;
+
+	// Updading routes
+	U->route = RV;
+	X->route = RV;
+	V->route = RU;
+	Y->route = RU;
+}
+
 // --------------------------------------------------- MOVES
 // Insert given Node U and its next Node X after the given Node V
 bool LocalSearch::shift10()
 {
 	// Check if the move is valid
 	if (nodeUCour == nodeYCour) return false;
+
+	// Inner load check heuristic
+	double routeUloadTransfer = params->clients[nodeUCour].demand;
+	if (routeUloadTransfer + routeV->load > params->vehicleCapacity) return false;
 
 	// Costs calculations
 		// Route U
@@ -317,12 +389,13 @@ bool LocalSearch::shift10()
 
 	// Check if the move is worth
 	if (routeUBalance + routeVBalance > -MY_EPSILON && params->testRoutine == false) return false;
-	// TODO: Check LOAD
 
 	// Make the move
 	insertNode(nodeU, nodeV);
 	updateRouteData(routeU);
 	if (routeU != routeV) updateRouteData(routeV);
+
+	// Check if the route has become infeaseble
 	return true;
 }
 
@@ -332,6 +405,10 @@ bool LocalSearch::shift20()
 	// Check if the move is valid
 	if (nodeUCour == nodeYCour) return false;
 	if (nodeU->next->isDepot) return false;
+
+	// Inner load check heuristic
+	double routeUloadTransfer = params->clients[nodeUCour].demand + params->clients[nodeXCour].demand;
+	if (routeUloadTransfer + routeV->load > params->vehicleCapacity) return false;
 
 	// Costs calculations
 		// Route U
@@ -345,7 +422,7 @@ bool LocalSearch::shift20()
 		double routeULoss = costPredUU + costUX + costXPostX;
 		double routeUBalance = routeUGain - routeULoss;
 
-		// Rooute V
+		// Route V
 		double costVY = params->distanceMatrix[nodeVCour][nodeYCour];
 		double costVU = params->distanceMatrix[nodeVCour][nodeUCour];
 		double costXY = params->distanceMatrix[nodeXCour][nodeYCour];
@@ -373,11 +450,15 @@ bool LocalSearch::shift30()
 	if (nodeU->next->isDepot) return false;
 	if (nodeU->next->next->isDepot) return false;
 
-	// Costs calculations
-		// Node W = Node X -> Next ( the last node on string to be transfered )
+	// Inner load check heuristic
+	int nodeWCour = nodeX->next->cour; // Node W = Node X -> Next ( the last node on string to be transfered )
+	double routeUloadTransfer = params->clients[nodeUCour].demand
+		+ params->clients[nodeXCour].demand
+		+ params->clients[nodeWCour].demand;
+	if (routeUloadTransfer + routeV->load > params->vehicleCapacity) return false;
 
+	// Costs calculations
 		// Route U
-		int nodeWCour = nodeX->next->cour;
 		int nodePostWCour = nodeX->next->next->cour;
 		double costPredUU = params->distanceMatrix[nodeUPredCour][nodeUCour];
 		double costUX = params->distanceMatrix[nodeUCour][nodeXCour];
@@ -389,7 +470,7 @@ bool LocalSearch::shift30()
 		double routeULoss = costPredUU + costUX + costXW + costWPostW;
 		double routeUBalance = routeUGain - routeULoss;
 
-		// Rooute V
+		// Route V
 		double costVY = params->distanceMatrix[nodeVCour][nodeYCour];
 		double costVU = params->distanceMatrix[nodeVCour][nodeUCour];
 		double costWY = params->distanceMatrix[nodeWCour][nodeYCour];
@@ -409,6 +490,163 @@ bool LocalSearch::shift30()
 	return true;
 }
 
+bool LocalSearch::swap11()
+{
+	// Check if the move is valid
+	if (nodeUCour == nodeVPredCour) return false;
+	if (nodeUCour == nodeYCour) return false;
+
+	// Inner load check heuristic
+	double routeUloadTransfer = params->clients[nodeUCour].demand;
+	double routeVloadTransfer = params->clients[nodeVCour].demand;
+
+	if (routeUloadTransfer + routeV->load - routeVloadTransfer > params->vehicleCapacity) return false;
+	if (routeVloadTransfer + routeU->load - routeUloadTransfer > params->vehicleCapacity) return false;
+	
+	// Costs calculations
+		// Route U
+		double costPredUU = params->distanceMatrix[nodeUPredCour][nodeUCour];
+		double costUX = params->distanceMatrix[nodeUCour][nodeXCour];
+		double costPredUV = params->distanceMatrix[nodeUPredCour][nodeVCour];
+		double costVX = params->distanceMatrix[nodeVCour][nodeXCour];
+
+		double routeUGain = costPredUV + costVX;
+		double routeULoss = costPredUU + costUX;
+		double routeUBalance = routeUGain - routeULoss;
+
+		// Route V 
+		double costPredVV = params->distanceMatrix[nodeVPredCour][nodeVCour];
+		double costVY = params->distanceMatrix[nodeVCour][nodeYCour];
+		double costPredVU = params->distanceMatrix[nodeVPredCour][nodeUCour];
+		double costUY = params->distanceMatrix[nodeUCour][nodeYCour];
+
+		double routeVGain = costPredVU + costUY;
+		double routeVLoss = costPredVV + costVY;
+		double routeVBalance = routeVGain - routeVLoss;
+
+	// Check if the move is worth
+	if (routeVBalance + routeUBalance > -MY_EPSILON && params->testRoutine == false) return false;
+	// TODO: Check LOAD
+
+	// Make the move
+	swapNode(nodeU, nodeV);
+	updateRouteData(routeU);
+	if (routeU != routeV) updateRouteData(routeV);
+	return true;
+}
+
+bool LocalSearch::swap21()
+{
+	// Check if the move is valid
+	if (nodeU->next->isDepot) return false;
+	if (nodeUCour == nodeVCour || nodeXCour == nodeVCour) return false;
+	//if (nodeXCour == nodeVPredCour) return false;
+
+	// Inner load check heuristic
+	double routeUloadTransfer = params->clients[nodeUCour].demand + params->clients[nodeXCour].demand;
+	double routeVloadTransfer = params->clients[nodeVCour].demand;
+
+	if (routeUloadTransfer + routeV->load - routeVloadTransfer > params->vehicleCapacity) return false;
+	if (routeVloadTransfer + routeU->load - routeUloadTransfer > params->vehicleCapacity) return false;
+
+	// Costs calculations
+		// Missing node IDS
+		int nodePostXCour = nodeX->next->cour;
+
+		// Common segments
+		double costUX = params->distanceMatrix[nodeUCour][nodeXCour];
+
+		// Route U
+		double costPredUU = params->distanceMatrix[nodeUPredCour][nodeUCour];
+		double costXPostX = params->distanceMatrix[nodeXCour][nodePostXCour];
+		double costPredUV = params->distanceMatrix[nodeUPredCour][nodeVCour];
+		double costVPostX = params->distanceMatrix[nodeVCour][nodePostXCour];
+
+		double routeUGain = costPredUV + costVPostX;
+		double routeULoss = costPredUU + costUX + costXPostX;
+		double routeUBalance = routeUGain - routeULoss;
+
+		// Route V 
+		double costPredVV = params->distanceMatrix[nodeVPredCour][nodeVCour];
+		double costVY = params->distanceMatrix[nodeVCour][nodeYCour];
+		double costPredVU = params->distanceMatrix[nodeVPredCour][nodeUCour];
+		double costXY = params->distanceMatrix[nodeXCour][nodeYCour];
+
+		double routeVGain = costPredVU + costUX + costXY;
+		double routeVLoss = costPredVV + costVY;
+		double routeVBalance = routeVGain - routeVLoss;
+
+	// Check if the move is worth
+	if (routeVBalance + routeUBalance > -MY_EPSILON && params->testRoutine == false) return false;
+	// TODO: Check LOAD
+
+	// Make the move
+	swapNode2(nodeU, nodeV);
+	updateRouteData(routeU);
+	if (routeU != routeV) updateRouteData(routeV);
+	return true;
+}
+
+bool LocalSearch::swap22()
+{
+	// Check if the move is valid
+	if (nodeU->next->isDepot) return false;
+	if (nodeV->next->isDepot) return false;
+	if (nodeUCour == nodeVCour || nodeUCour == nodeYCour || nodeVCour == nodeXCour) return false;
+	//if (nodeXCour == nodeVPredCour) return false;
+
+	// Inner load check heuristic
+	double routeUloadTransfer = params->clients[nodeUCour].demand + params->clients[nodeXCour].demand;
+	double routeVloadTransfer = params->clients[nodeVCour].demand + params->clients[nodeYCour].demand;
+
+	if (routeUloadTransfer + routeV->load - routeVloadTransfer > params->vehicleCapacity) return false;
+	if (routeVloadTransfer + routeU->load - routeUloadTransfer > params->vehicleCapacity) return false;
+
+	// Costs calculations
+		// Missing node IDS
+		int nodePostXCour = nodeX->next->cour;
+		int nodePostYCour = nodeY->next->cour;
+
+		// Common segments
+		double costUX = params->distanceMatrix[nodeUCour][nodeXCour];
+		double costVY = params->distanceMatrix[nodeVCour][nodeYCour];
+
+		// Route U
+		double costPredUU = params->distanceMatrix[nodeUPredCour][nodeUCour];
+		double costXPostX = params->distanceMatrix[nodeXCour][nodePostXCour];
+		double costPredUV = params->distanceMatrix[nodeUPredCour][nodeVCour];
+		double costYPostX = params->distanceMatrix[nodeYCour][nodePostXCour];
+
+		double routeUGain = costPredUV + costVY + costYPostX;
+		double routeULoss = costPredUU + costUX + costXPostX;
+		double routeUBalance = routeUGain - routeULoss;
+
+		// Route V 
+		double costPredVV = params->distanceMatrix[nodeVPredCour][nodeVCour];
+		double costYPostY = params->distanceMatrix[nodeYCour][nodePostYCour];
+		double costPredVU = params->distanceMatrix[nodeVPredCour][nodeUCour];
+		double costXPostY = params->distanceMatrix[nodeXCour][nodePostYCour];
+
+		double routeVGain = costPredVU + costUX + costXPostY;
+		double routeVLoss = costPredVV + costVY + costYPostY;
+		double routeVBalance = routeVGain - routeVLoss;
+
+	// Check if the move is worth
+	if (routeVBalance + routeUBalance > -MY_EPSILON && params->testRoutine == false) return false;
+	// TODO: Check LOAD
+
+	// Make the move
+	swapNode22(nodeU, nodeV);
+	updateRouteData(routeU);
+	if (routeU != routeV) updateRouteData(routeV);
+	return true;
+}
+
+bool LocalSearch::cross()
+{
+
+}
+
 // ------
 
 bool LocalSearch::reinsertion()
@@ -426,17 +664,21 @@ bool LocalSearch::oropt3()
 	return shift30();
 }
 
+bool LocalSearch::exchange()
+{
+	return swap11();
+}
+
+bool LocalSearch::twoopt()
+{
+	return cross();
+}
+
 // -------------------
 bool LocalSearch::move1()
 {
 	double costSuppU = params->distanceMatrix[nodeUPredCour][nodeXCour] - params->distanceMatrix[nodeUPredCour][nodeUCour] - params->distanceMatrix[nodeUCour][nodeXCour];
 	double costSuppV = params->distanceMatrix[nodeVCour][nodeUCour] + params->distanceMatrix[nodeUCour][nodeYCour] - params->distanceMatrix[nodeVCour][nodeYCour];
-
-	if (routeU != routeV)
-	{
-		costSuppU += excessCharge(routeU->load - loadU) - routeU->loadPenalty;
-		costSuppV += excessCharge(routeV->load + loadU) - routeV->loadPenalty;
-	}
 
 	if (costSuppU + costSuppV > -MY_EPSILON) return false;
 	if (nodeUCour == nodeYCour) return false;
@@ -451,15 +693,6 @@ bool LocalSearch::move4()
 {
 	double costSuppU = params->distanceMatrix[nodeUPredCour][nodeVCour] + params->distanceMatrix[nodeVCour][nodeXCour] - params->distanceMatrix[nodeUPredCour][nodeUCour] - params->distanceMatrix[nodeUCour][nodeXCour];
 	double costSuppV = params->distanceMatrix[nodeVPredCour][nodeUCour] + params->distanceMatrix[nodeUCour][nodeYCour] - params->distanceMatrix[nodeVPredCour][nodeVCour] - params->distanceMatrix[nodeVCour][nodeYCour];
-
-	if (routeU != routeV)
-	{
-		costSuppU += excessCharge(routeU->load + loadV - loadU) 
-			- routeU->loadPenalty;
-
-		costSuppV += excessCharge(routeV->load + loadU - loadV) 
-			- routeV->loadPenalty;
-	}
 
 	if (costSuppU + costSuppV > -MY_EPSILON) return false;
 	if (nodeUCour == nodeVPredCour || nodeUCour == nodeYCour) return false;
@@ -503,10 +736,7 @@ bool LocalSearch::move7()
 
 bool LocalSearch::move8()
 {
-	double cost = params->distanceMatrix[nodeUCour][nodeVCour] + params->distanceMatrix[nodeXCour][nodeYCour] - params->distanceMatrix[nodeUCour][nodeXCour] - params->distanceMatrix[nodeVCour][nodeYCour]
-		+ excessCharge(nodeU->cumulatedLoad + nodeV->cumulatedLoad)
-		+ excessCharge(routeU->load + routeV->load - nodeU->cumulatedLoad - nodeV->cumulatedLoad)
-		- routeU->loadPenalty - routeV->loadPenalty;
+	double cost = params->distanceMatrix[nodeUCour][nodeVCour] + params->distanceMatrix[nodeXCour][nodeYCour] - params->distanceMatrix[nodeUCour][nodeXCour] - params->distanceMatrix[nodeVCour][nodeYCour];
 
 	if (cost > -MY_EPSILON) return false;
 
@@ -580,6 +810,12 @@ void LocalSearch::updateRouteData(Route * myRoute)
 	double mycharge = 0.;
 	node->cumulatedLoad = 0.;
 
+	double thisLoad = 0;
+	double last1Load = 0; // load of previous node
+	double last2Load = 0; // load of 2 previous node
+	double sumLast2 = 0; // Sum of last 2 loads
+	double sumLast3 = 0; // Sum of last 3 loads
+
 	bool firstIt = true;
 	while (!node->isDepot || firstIt)
 	{
@@ -587,12 +823,38 @@ void LocalSearch::updateRouteData(Route * myRoute)
 		myplace++;
 		node = node->next;
 		node->position = myplace;
-		mycharge += params->clients[node->cour].demand;
+		thisLoad = params->clients[node->cour].demand;
+		mycharge += thisLoad;
 		node->cumulatedLoad = mycharge;
+
+		// Min Max Updaters
+		if (thisLoad < myRoute->min1load || myplace == 1) myRoute->min1load = thisLoad;
+		if (thisLoad > myRoute->max1load || myplace == 1) myRoute->max1load = thisLoad;
+
+		if (myplace > 1) {
+			// Last 2 min and max
+			sumLast2 = last1Load + thisLoad;
+
+			if (sumLast2 < myRoute->min2load || myplace == 2) myRoute->min2load = sumLast2;
+			if (sumLast2 > myRoute->max2load || myplace == 2) myRoute->max2load = sumLast2;
+
+			if (myplace > 2) {
+				// Last 3 min adn max
+				sumLast3 = last2Load + sumLast2;
+
+				if (sumLast3 < myRoute->min3load || myplace == 3) myRoute->min3load = sumLast3;
+				if (sumLast3 > myRoute->max3load || myplace == 3) myRoute->max3load = sumLast3;
+
+				// Update load memory
+				last2Load = last1Load;
+			}
+
+			// Update load memory
+			last1Load = thisLoad;
+		}
 	}
 
 	myRoute->load = mycharge;
-	myRoute->loadPenalty = excessCharge(mycharge);
 	myRoute->nbNodes = myplace;
 
 	if (myRoute->depot->next->isDepot) emptyRoutes.insert(myRoute->cour); // If its an empty route, store it

@@ -4,6 +4,7 @@
 void Solver::runTests(std::string exportFile)
 {
 	// Init Test Solution
+	params->vehicleCapacity = 1000000000;
 	Solution testSolution(params);
 	testSolution.initializeTestSolution();
 

@@ -11,7 +11,12 @@ struct Route
 	int nbNodes;				// Number of nodes in the route
 	Node * depot;				// Pointer to the depot node
 	double load;				// Total load on the route
-	double loadPenalty;			// Total load penalty on the route
+	double min1load;					// Min load of a single customer on this route
+	double max1load;					// Max load of a single customer on this route
+	double min2load;					// Min load of a two adjacents customers on this route
+	double max2load;					// Max load of a two adjacents customers on this route
+	double min3load;					// Min load of a three adjacents customers on this route
+	double max3load;					// Max load of a three adjacents customers on this route
 };
 
 struct Node
@@ -72,20 +77,28 @@ private:
 
 	// Intra Route Moves
 	bool reinsertion();
+	bool exchange();
 	bool oropt2();
 	bool oropt3();
+	bool twoopt();
 
 	// Inter Route Moves
 	bool shift10();
 	bool shift20();
 	bool shift30();
+	bool swap11();
+	bool swap21();
+	bool swap22();
+	bool cross();
 
 	
 	/* ROUTINES TO UPDATE THE DATA STUCTURES REPRESENTING THE SOLUTIONS */
 	static void insertNode(Node * U, Node * V);			// Solution update: Insert U after V
 	static void insertNode2(Node* U, Node* V);			// Solution update: Insert U and its next node after V
 	static void insertNode3(Node* U, Node* V);			// Solution update: Insert U and its two next nodes after V
-	static void swapNode(Node * U, Node * V) ;			// Solution update: Swap U and V							   
+	static void swapNode(Node * U, Node * V) ;			// Solution update: Swap U with V							   
+	static void swapNode2(Node * U, Node * V) ;			// Solution update: Swap (U and U->next) with V							   
+	static void swapNode22(Node * U, Node * V) ;		// Solution update: Swap (U and U->next) with (V and V->next)							   
 	void updateRouteData(Route * myRoute);	// Updates the preprocessed data of a route
 
 	// Loading an initial solution into the local search structures
