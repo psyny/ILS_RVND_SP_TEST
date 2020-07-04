@@ -75,6 +75,7 @@ Params::Params(std::string pathToInstance, int seedRNG): seed(seedRNG)
 void Params::setMethodParams()
 {
 	// You can define some method parameters here if you wish
-	// Example: defining a penalty parameter
-	penalityCapa = 100;
+	maxiter_b = 1000;
+	maxiterILS_b = 1000;
+	maxiterRVND_b = 1000;
 }

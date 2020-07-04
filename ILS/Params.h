@@ -35,9 +35,6 @@ public:
 	std::default_random_engine generator;				// Random number generator
 	int seed;											// Seed used to initialize the generator
 
-	/* PARAMETERS OF THE ALGORITHM */
-	double penalityCapa ;								// Penalty coefficient for each unit of capacity violation
-
 	/* DATA OF THE CVRP INSTANCE */
 	int nbClients ;												// Number of customers
 	int nbVehicles ;											// Number of vehicles
@@ -50,6 +47,15 @@ public:
 	bool testRoutine;
 
 	/* PARSING ROUTINES */
+
+	/* METHOD HYPER PARAMETERS */
+	int maxiter_b;
+	int maxiterILS_b;
+	int maxiterRVND_b;
+
+	/* METHOD DISCOVERED PARAMETERS */
+	int numberOfVehicles;
+	double tolerance;
 
 	// Setting the parameters of the method
 	void setMethodParams();

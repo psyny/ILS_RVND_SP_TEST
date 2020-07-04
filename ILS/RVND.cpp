@@ -1,9 +1,9 @@
-#include "LocalSearch.h" 
+#include "RVND.h" 
 // ----------------------------------------------------------------------------------
 // This first segment is here to test route operations
 
 // Function to check if the moves are working as intended
-void LocalSearch::runTests(Solution& mySol, std::string exportFile)
+void RVND::runTests(Solution& mySol, std::string exportFile)
 {
 	loadSolution(mySol);
 	std::vector < std::string > results = std::vector < std::string >();
@@ -12,15 +12,23 @@ void LocalSearch::runTests(Solution& mySol, std::string exportFile)
 	// Save the state of the given solution
 	routesToString("Initial State: ", results);
 
+	MoveCheck moveCheck;
+	int nodeUid;
+	int nodeVid;
+
 	// ---------------------------- Inter-Route Moves
 	results.push_back("Inter-Route Moves ------------------------------------------------");
 	results.push_back("");
 
 	// Shift (1,0)
-	prepareNodes(1, 7);
-	shift10();
-	routesToString("Shift(1,0), 1 to 7: ", results);
+	nodeUid = 1;
+	nodeVid = 7;
+	prepareNodes(nodeUid, nodeVid);
+	moveCheck = shift10_check();
+	if(moveCheck.isValid == true ) shift10_do();
+	routesToString("Shift(1,0), " + std::to_string(nodeUid) + " to " + std::to_string(nodeVid) + ": ", results);
 
+	/*
 	// Shift (2,0)
 	prepareNodes(7, 2);
 	shift20();
@@ -64,12 +72,22 @@ void LocalSearch::runTests(Solution& mySol, std::string exportFile)
 	prepareNodes(5, 7);
 	oropt3();
 	routesToString("Or-Opt3, 5 to 7: ", results);
+	*/
+
+	// ---------------------------- Sweeps
+	MoveInfo bestMoveInfo;
+	bestMoveInfo = shift10_sweep();
+	results.push_back("Best Move Info: ");
+	results.push_back("CostChange: " + std::to_string(bestMoveInfo.costChange) );
+	results.push_back("NodeUid: " + std::to_string(bestMoveInfo.nodeUcour) );
+	results.push_back("NodeVid: " + std::to_string(bestMoveInfo.nodeVcour) );
+	
 
 	// ---------------------------- Export to external file
 	exportTestToFile(results, exportFile);
 }
 
-void LocalSearch::prepareNodes(int nudeIdU, int nudeIdV)
+void RVND::prepareNodes(int nudeIdU, int nudeIdV)
 {
 	nodeU = &clients[nudeIdU];
 	setLocalVariablesRouteU();
@@ -78,7 +96,7 @@ void LocalSearch::prepareNodes(int nudeIdU, int nudeIdV)
 	setLocalVariablesRouteV();
 }
 
-void LocalSearch::routesToString(std::string header, std::vector < std::string > & results)
+void RVND::routesToString(std::string header, std::vector < std::string > & results)
 {
 	results.push_back(header);
 	double totalCost = 0;
@@ -127,7 +145,7 @@ void LocalSearch::routesToString(std::string header, std::vector < std::string >
 	results.push_back("");
 }
 
-void LocalSearch::exportTestToFile(std::vector < std::string > & results, std::string exportFile)
+void RVND::exportTestToFile(std::vector < std::string > & results, std::string exportFile)
 {
 	std::ofstream myfile(exportFile);
 	if (myfile.is_open())
@@ -148,66 +166,71 @@ void LocalSearch::exportTestToFile(std::vector < std::string > & results, std::s
 // -----------------------------------------------------------------------------------
 
 // Algorithm run
-void LocalSearch::run(Solution & mySol)
+void RVND::run(Solution & mySol)
 {
-	loadSolution(mySol);
+	loadSolution(mySol); 
 
-	// Shuffling the order of the move evaluations at each local search
-	std::shuffle(orderNodes.begin(), orderNodes.end(), params->generator);
-	
-	searchCompleted = false;
-	bool movePerformed;
-	while (!searchCompleted)
+	// UPDATE ADS
+	// WHY?
+
+	// Init inter route NL
+	populateInterRouteNL();
+
+	// Main Loop
+	while (interRouteNL.size() > 0)
 	{
-		searchCompleted = true; // This flag will be set back to false every time a move is applied
-		for (int posU = 0 ; posU < params->nbClients ; posU++)
-		{
-			nodeU = &clients[orderNodes[posU]];
-			setLocalVariablesRouteU();
-			movePerformed = false;
-			for (int posV = 0; posV < params->nbClients && !movePerformed; posV++)
-			{
-				if (posU != posV)
-				{
-					nodeV = &clients[orderNodes[posV]];
-					setLocalVariablesRouteV();
-					if (!movePerformed) movePerformed = move1();						// RELOCATE
-					if (!movePerformed && posU < posV) movePerformed = move4();			// SWAP
-					if (!movePerformed && routeU == routeV) movePerformed = move7();	// 2-OPT
-					if (!movePerformed && routeU != routeV) movePerformed = move8();	// 2-OPT*
-					// PERHAPS OTHER MOVES...
-					
-					// DON'T FORGET SPECIAL CASES: MOVES THAT INSERT NODE-U DIRECTLY AFTER THE DEPOT
-					if (!movePerformed && nodeV->prev->isDepot)
-					{
-						nodeV = nodeV->prev;
-						setLocalVariablesRouteV();
-						if (!movePerformed) movePerformed = move1();					// RELOCATE
-						if (!movePerformed && routeU != routeV && !nodeV->next->isDepot) movePerformed = move8(); // 2-OPT*
-						// PERHAPS OTHER MOVES...
-					}
+		// Choose a random move to create a neighborhoood (the list init is random)
+		int moveId = interRouteNL.back();
 
-					//  DON'T FORGET SPECIAL CASES: MOVES THAT INSERT NODE-U IN AN EMPTY ROUTE (OR CUT A ROUTE IN TWO IN THE CASE OF 2-OPT* VARIANTS)
-					if (!movePerformed && !emptyRoutes.empty())
-					{
-						nodeV = routes[*emptyRoutes.begin()].depot;
-						setLocalVariablesRouteV();
-						if (!movePerformed) movePerformed = move1();					// RELOCATE
-						if (!movePerformed && routeU != routeV && !nodeV->next->isDepot) movePerformed = move8(); // 2-OPT*
-						// PERHAPS OTHER MOVES ...
-					}
-				}
-			}
-			// Count the moves which have been applied
-			if (movePerformed) searchCompleted = false;
-			nbMoves += (int)movePerformed;
+		// Find the best solution parameters on the neighborhood
+		moveId = 0; // DEBUG: only while we dont implement all features
+		MoveInfo moveInfo = getBestInterRouteMove(moveId);
+
+		// Check if the move is good
+		if (moveInfo.costChange <= -MY_EPSILON)
+		{
+			doInterMoveOnCurrentSolution(moveId, moveInfo);
 		}
+		else
+		{
+			// Remove move from NL
+			interRouteNL.pop_back();
+		}
+
+
+
+	}
+
+	// ----------------------------------
+
+
+	for (int iterILS = 0; iterILS < params->maxiterILS_b; iterILS++)
+	{
+		// PREP 1: Generate Initial Solution
+		Solution startingSolution(params);
+		startingSolution.initializeSweep(); // TODO: Replace for a better way
+
+		// STEP 2: RVND Loop
+		for (int iterRVND = 0; iterRVND < params->maxiterRVND_b; iterRVND++)
+		{
+			// STEP 2.1: Get solution from RVND
+			// TODO
+
+			// STEP 2.2: Solution Update
+			// TODO
+
+			// STEP 2.3: Perturbation 
+			// TODO
+		}
+
+		// STEP 3: Solution check and update
+		// TODO
 	}
 
 	exportSolution(mySol);
 }
 
-void LocalSearch::setLocalVariablesRouteU()
+void RVND::setLocalVariablesRouteU()
 {
 	routeU = nodeU->route;
 	nodeX = nodeU->next;
@@ -219,7 +242,7 @@ void LocalSearch::setLocalVariablesRouteU()
 	loadX	 = params->clients[nodeXCour].demand;
 }
 
-void LocalSearch::setLocalVariablesRouteV()
+void RVND::setLocalVariablesRouteV()
 {
 	routeV = nodeV->route;
 	nodeY = nodeV->next;
@@ -231,7 +254,7 @@ void LocalSearch::setLocalVariablesRouteV()
 	loadY	 = params->clients[nodeYCour].demand;
 }
 
-void LocalSearch::insertNode(Node * U, Node * V)
+void RVND::insertNode(Node * U, Node * V)
 {
 	U->prev->next = U->next;
 	U->next->prev = U->prev;
@@ -243,7 +266,7 @@ void LocalSearch::insertNode(Node * U, Node * V)
 	U->route = V->route;
 }
 
-void LocalSearch::insertNode2(Node* U, Node* V)
+void RVND::insertNode2(Node* U, Node* V)
 {
 	Node* X = U->next;
 
@@ -258,7 +281,7 @@ void LocalSearch::insertNode2(Node* U, Node* V)
 	X->route = V->route;
 }
 
-void LocalSearch::insertNode3(Node* U, Node* V)
+void RVND::insertNode3(Node* U, Node* V)
 {
 	Node* X = U->next;
 	Node* W = X->next;
@@ -275,7 +298,7 @@ void LocalSearch::insertNode3(Node* U, Node* V)
 	W->route = V->route;
 }
 
-void LocalSearch::swapNode(Node * U, Node * V)
+void RVND::swapNode(Node * U, Node * V)
 {
 	Node * myVPred = V->prev;
 	Node * myVSuiv = V->next;
@@ -298,7 +321,7 @@ void LocalSearch::swapNode(Node * U, Node * V)
 	V->route = myRouteU;
 }
 
-void LocalSearch::swapNode2(Node* U, Node* V)
+void RVND::swapNode2(Node* U, Node* V)
 {
 	// Other related nodes
 	Node* X = U->next;
@@ -326,7 +349,7 @@ void LocalSearch::swapNode2(Node* U, Node* V)
 	V->route = RU;
 }
 
-void LocalSearch::swapNode22(Node* U, Node* V)
+void RVND::swapNode22(Node* U, Node* V)
 {
 	// Other related nodes
 	Node* X = U->next;
@@ -358,14 +381,16 @@ void LocalSearch::swapNode22(Node* U, Node* V)
 
 // --------------------------------------------------- MOVES
 // Insert given Node U and its next Node X after the given Node V
-bool LocalSearch::shift10()
+MoveCheck RVND::shift10_check()
 {
+	MoveCheck moveCheck{ false, 0 };
+
 	// Check if the move is valid
-	if (nodeUCour == nodeYCour) return false;
+	if (nodeUCour == nodeYCour) return moveCheck;
 
 	// Inner load check heuristic
 	double routeUloadTransfer = params->clients[nodeUCour].demand;
-	if (routeUloadTransfer + routeV->load > params->vehicleCapacity) return false;
+	if (routeUloadTransfer + routeV->load > params->vehicleCapacity) return moveCheck;
 
 	// Costs calculations
 		// Route U
@@ -386,20 +411,22 @@ bool LocalSearch::shift10()
 		double routeVLoss = costVY;
 		double routeVBalance = routeVGain - routeVLoss;
 		
-	// Check if the move is worth
-	if (routeUBalance + routeVBalance > -MY_EPSILON && params->testRoutine == false) return false;
+	// Return Struct
+	moveCheck.isValid = true;
+	moveCheck.costChange = routeUBalance + routeVBalance;
+	return moveCheck;
+}
 
-	// Make the move
+bool RVND::shift10_do()
+{
 	insertNode(nodeU, nodeV);
 	updateRouteData(routeU);
 	if (routeU != routeV) updateRouteData(routeV);
-
-	// Check if the route has become infeaseble
 	return true;
 }
 
 // Insert given Node U and its next Node X after the given Node V
-bool LocalSearch::shift20()
+bool RVND::shift20()
 {
 	// Check if the move is valid
 	if (nodeUCour == nodeYCour) return false;
@@ -442,7 +469,7 @@ bool LocalSearch::shift20()
 }
 
 // Insert given Node U and its two next Nodes X and W after the given Node V
-bool LocalSearch::shift30()
+bool RVND::shift30()
 {
 	// Check if the move is valid
 	if (nodeUCour == nodeYCour) return false;
@@ -489,7 +516,7 @@ bool LocalSearch::shift30()
 	return true;
 }
 
-bool LocalSearch::swap11()
+bool RVND::swap11()
 {
 	// Check if the move is valid
 	if (nodeUCour == nodeVPredCour) return false;
@@ -534,7 +561,7 @@ bool LocalSearch::swap11()
 	return true;
 }
 
-bool LocalSearch::swap21()
+bool RVND::swap21()
 {
 	// Check if the move is valid
 	if (nodeU->next->isDepot) return false;
@@ -586,7 +613,7 @@ bool LocalSearch::swap21()
 	return true;
 }
 
-bool LocalSearch::swap22()
+bool RVND::swap22()
 {
 	// Check if the move is valid
 	if (nodeU->next->isDepot) return false;
@@ -641,40 +668,42 @@ bool LocalSearch::swap22()
 	return true;
 }
 
-bool LocalSearch::cross()
+bool RVND::cross()
 {
 
 }
 
 // ------
 
-bool LocalSearch::reinsertion()
+/*
+bool RVND::reinsertion()
 {
-	return shift10();
+	return shift10_check();
 }
+*/
 
-bool LocalSearch::oropt2()
+bool RVND::oropt2()
 {
 	return shift20();
 }
 
-bool LocalSearch::oropt3()
+bool RVND::oropt3()
 {
 	return shift30();
 }
 
-bool LocalSearch::exchange()
+bool RVND::exchange()
 {
 	return swap11();
 }
 
-bool LocalSearch::twoopt()
+bool RVND::twoopt()
 {
 	return cross();
 }
 
 // -------------------
-bool LocalSearch::move1()
+bool RVND::move1()
 {
 	double costSuppU = params->distanceMatrix[nodeUPredCour][nodeXCour] - params->distanceMatrix[nodeUPredCour][nodeUCour] - params->distanceMatrix[nodeUCour][nodeXCour];
 	double costSuppV = params->distanceMatrix[nodeVCour][nodeUCour] + params->distanceMatrix[nodeUCour][nodeYCour] - params->distanceMatrix[nodeVCour][nodeYCour];
@@ -688,7 +717,7 @@ bool LocalSearch::move1()
 	return true;
 }
 
-bool LocalSearch::move4()
+bool RVND::move4()
 {
 	double costSuppU = params->distanceMatrix[nodeUPredCour][nodeVCour] + params->distanceMatrix[nodeVCour][nodeXCour] - params->distanceMatrix[nodeUPredCour][nodeUCour] - params->distanceMatrix[nodeUCour][nodeXCour];
 	double costSuppV = params->distanceMatrix[nodeVPredCour][nodeUCour] + params->distanceMatrix[nodeUCour][nodeYCour] - params->distanceMatrix[nodeVPredCour][nodeVCour] - params->distanceMatrix[nodeVCour][nodeYCour];
@@ -703,7 +732,7 @@ bool LocalSearch::move4()
 }
 
 
-bool LocalSearch::move7()
+bool RVND::move7()
 {
 	if (nodeU->position > nodeV->position) return false;
 
@@ -733,7 +762,7 @@ bool LocalSearch::move7()
 	return true;
 }
 
-bool LocalSearch::move8()
+bool RVND::move8()
 {
 	double cost = params->distanceMatrix[nodeUCour][nodeVCour] + params->distanceMatrix[nodeXCour][nodeYCour] - params->distanceMatrix[nodeUCour][nodeXCour] - params->distanceMatrix[nodeVCour][nodeYCour];
 
@@ -801,7 +830,7 @@ bool LocalSearch::move8()
 	return true;
 }
 
-void LocalSearch::updateRouteData(Route * myRoute)
+void RVND::updateRouteData(Route * myRoute)
 {
 	int myplace = 0;
 	Node * node = myRoute->depot;
@@ -860,7 +889,55 @@ void LocalSearch::updateRouteData(Route * myRoute)
 	else emptyRoutes.erase(myRoute->cour); // Otherwise make sure its not part of the empty route vector
 }
 
-void LocalSearch::loadSolution(Solution & mySol)
+// -------------------------------------------------------------
+// MOVE SWEEPS: search current solution for the best move
+// -------------------------------------------------------------
+MoveInfo RVND::shift10_sweep()
+{
+	MoveCheck moveCheck;
+	MoveInfo bestMoveInfo;
+	bool firstMove = true;
+
+	for (int routeUid = 0; routeUid < routes.size() - 1; routeUid++) {
+		Route* rU = &routes[routeUid];
+		for (int routeVid = routeUid + 1; routeVid < routes.size(); routeVid++) {
+			Route* rV = &routes[routeVid];
+
+			Node* nU = depots[routeUid].next;
+			Node* nV = depots[routeVid].next;
+
+			while (!nU->isDepot)
+			{
+				while (!nV->isDepot)
+				{
+					int nodeUid = nU->cour;
+					int nodeVid = nV->cour;
+					prepareNodes(nodeUid, nodeVid);
+
+					moveCheck = shift10_check();
+					if (moveCheck.isValid == true && moveCheck.costChange < -MY_EPSILON) {
+						if (moveCheck.costChange < -MY_EPSILON || firstMove == true) {
+							firstMove = false;
+							bestMoveInfo.costChange = moveCheck.costChange;
+							bestMoveInfo.nodeUcour = nodeUid;
+							bestMoveInfo.nodeVcour = nodeVid;
+						}
+					}
+					nV = nV->next;
+				}
+				nU = nU->next;
+			}
+		}
+	}
+
+	return bestMoveInfo;
+}
+
+// -------------------------------------------------------------
+// SOLUTION FUNCTIONS
+// -------------------------------------------------------------
+
+void RVND::loadSolution(Solution & mySol)
 {
 	emptyRoutes.clear();
 	nbMoves = 0;
@@ -897,7 +974,7 @@ void LocalSearch::loadSolution(Solution & mySol)
 	}
 }
 
-void LocalSearch::exportSolution(Solution & mySol)
+void RVND::exportSolution(Solution & mySol)
 {
 	int pos = 0;
 	for (int r = 0; r < params->nbVehicles; r++)
@@ -914,7 +991,7 @@ void LocalSearch::exportSolution(Solution & mySol)
 	mySol.evaluateCost();
 }
 
-LocalSearch::LocalSearch(Params * params) : params (params)
+RVND::RVND(Params * params) : params (params)
 {
 	clients = std::vector < Node >(params->nbClients + 1);
 	routes = std::vector < Route >(params->nbVehicles);
@@ -940,3 +1017,41 @@ LocalSearch::LocalSearch(Params * params) : params (params)
 		orderNodes.push_back(i);
 }
 
+void RVND::populateInterRouteNL()
+{
+	// Init list
+	interRouteNL = std::vector<int>(INTERROUTE_MOVES);
+	for (int i = 0; i < INTERROUTE_MOVES; i++) interRouteNL.push_back(i);
+
+	// Shuffle list
+	std::shuffle(interRouteNL.begin(), interRouteNL.end(), params->generator);
+}
+
+MoveInfo RVND::getBestInterRouteMove(int moveId)
+{
+	MoveInfo moveInfo;
+	switch (moveId)
+	{
+		case 0:
+			return shift10_sweep();
+
+		default:
+			return moveInfo;
+	}
+}
+
+bool RVND::doInterMoveOnCurrentSolution(int moveId, MoveInfo & moveInfo)
+{
+	prepareNodes(moveInfo.nodeUcour, moveInfo.nodeVcour);
+
+	switch (moveId)
+	{
+	case 0:
+		return shift10_do();
+
+	default:
+		return false;
+	}
+}
+
+ 

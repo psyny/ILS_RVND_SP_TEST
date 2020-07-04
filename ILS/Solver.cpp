@@ -1,4 +1,5 @@
 #include "Solver.h"
+#include "RVND.h"
 
 // Routine of tests
 void Solver::runTests(std::string exportFile)
@@ -9,34 +10,65 @@ void Solver::runTests(std::string exportFile)
 	testSolution.initializeTestSolution();
 
 	// Run tests
-	localSearch.runTests(testSolution, exportFile);
+	RVND rvnd = RVND(params);
+	rvnd.runTests(testSolution, exportFile);
 }
 
-void Solver::run(int nbIterations, Solution & finalSolution)
+void Solver::run(Solution & finalSolution)
 {
-	// Example of a trivial algorithm loop which consists in repeating nbIterations of construction and local search
-	// Terminates when reaching a maximum number of iterations or the time limit
+	// TODO: Decide to run algorithm A or B for ILS-RVND-SP-b
+
+	//runA(finalSolution);
+	runB(finalSolution);
+}
+
+void Solver::runA(Solution& finalSolution)
+{
+
+}
+
+void Solver::runB(Solution& finalSolution)
+{
 	Solution bestSolution(params);
 
-	for (int nbIter = 0;  nbIter < nbIterations && clock() - params->startTime <= params->timeLimit; nbIter++)
-	{	
+	// Preparations:
+	// TODO: Tolerance definition
+
+	// Main Loop
+	for (int nbIter = 0; nbIter < params->maxiter_b && clock() - params->startTime <= params->timeLimit; nbIter++)
+	{
+		// STEP 1: ILS-RVND
+		// TODO: Get a solution from the ILS-RVND
+
+		// STEP 2: SP
+		// TODO: Get a solution from the SP
+
+		// STEP 3: Update best solution and route pool
+		// TODO
+
+		continue;
+
+		// --------------------
 		// STEP 1: Create an initial solution
 		Solution mySolution(params);
 		mySolution.initializeSweep();
 
 		// STEP 2: Run the ILS
+
+		// ILS-
 		localSearch.run(mySolution);
 		if (mySolution.penalizedCost < bestSolution.penalizedCost)
 			bestSolution = mySolution;
 
 		// STEP 3: Run the SP
 
-		
+
 		// Some traces
-		if (nbIter%100 == 0) std::cout << "BEST SOLUTION: " << " | IT: " << nbIter << " | DISTANCE: " << bestSolution.totalDistance << " | COST: " << bestSolution.penalizedCost << std::endl;
+		if (nbIter % 100 == 0) std::cout << "BEST SOLUTION: " << " | IT: " << nbIter << " | DISTANCE: " << bestSolution.totalDistance << " | COST: " << bestSolution.penalizedCost << std::endl;
 	}
 	finalSolution = bestSolution;
 }
 
-Solver::Solver(Params * params): params(params), localSearch(LocalSearch(params))
-{}
+Solver::Solver(Params * params): params(params), localSearch(ILSRVND(params))
+{
+}

@@ -2,19 +2,21 @@
 #define GENETIC_H
 
 #include "Solution.h"
-#include "LocalSearch.h"
+#include "ILSRVND.h"
 
 class Solver
 {
 private:
 
 	Params * params;				// Problem and method parameters
-	LocalSearch localSearch;		// Local search algorithm
+	ILSRVND localSearch;		// Local search algorithm
+	void runA(Solution& finalSolution);
+	void runB(Solution& finalSolution);
 
 public:
 
     // Running the solver
-    void run(int nbIterations, Solution & finalSolution);
+    void run(Solution & finalSolution);
 
 	// Running the tests
 	void runTests(std::string exportFile);

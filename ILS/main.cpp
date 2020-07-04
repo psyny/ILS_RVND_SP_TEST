@@ -1,6 +1,6 @@
 #include "Solver.h"
 #include "commandline.h"
-#include "LocalSearch.h"
+#include "ILSRVND.h"
 using namespace std;
 
 int main(int argc, char *argv[])
@@ -26,7 +26,7 @@ int main(int argc, char *argv[])
 			params.timeLimit = c.get_cpu_time() * CLOCKS_PER_SEC;
 			Solution mySolution(&params);				// Creating a solution object
 			Solver mySolver(&params);					// Creating a solver object
-			mySolver.run(5000, mySolution);				// Running the solver for 5000 iterations (repeated construction and local search)
+			mySolver.run(mySolution);					
 			params.endTime = clock();
 			std::cout << "----- END OF THE ALGORITHM -----" << std::endl;
 

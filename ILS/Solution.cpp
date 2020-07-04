@@ -99,7 +99,7 @@ void Solution::evaluateCost()
 		}
 	}
 
-	penalizedCost = totalDistance + totalCapacityViolation * params->penalityCapa;
+	penalizedCost = totalDistance;
 	isFeasible = (totalCapacityViolation < MY_EPSILON);
 }
 
