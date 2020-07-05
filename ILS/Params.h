@@ -51,7 +51,7 @@ public:
 	/* METHOD HYPER PARAMETERS */
 	int maxiter_b;
 	int maxiterILS_b;
-	int maxiterRVND_b;
+	int maxStartsILS_b;
 
 	/* METHOD DISCOVERED PARAMETERS */
 	int numberOfVehicles;

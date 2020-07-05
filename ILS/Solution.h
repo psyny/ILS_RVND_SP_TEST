@@ -32,6 +32,19 @@ public:
   // Builds an initial solution to test ILS moves 
   void initializeTestSolution();
 
+  // Builds an initial solution according to the one proposed on the ILS-RVND paper
+  void initializeSolution();
+
+  // Adds a client at of the route
+  void addClient(int routeId, int clientId);
+
+  // Adds a client at a specific position
+  void addClient(int routeId, int clientId, int pos);
+
+  // Get a route sequence
+  std::vector<int>* getRoute(int routeId);
+
+
   // Constructor: Empty solution as a container
   Solution(Params * params): params(params)
   {

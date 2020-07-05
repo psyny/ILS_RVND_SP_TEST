@@ -3,7 +3,14 @@
 
 #include "Solution.h"
 
-#define INTERROUTE_MOVES 5
+#define RVND_DEBUG false
+
+#define INTERROUTE_MOVES 2
+#define INTRAROUTE_MOVES 1
+#define PERTURBROUTE_MOVES 2
+#define PERTURBROUTE_MIN 1
+#define PERTURBROUTE_MAX 3
+#define PERTURBROUTE_MAXFAILS 10
 
 struct Node;
 
@@ -77,6 +84,8 @@ private:
 
 	/* Neighborhood Lists */
 	std::vector <int> interRouteNL;
+	std::vector <int> intraRouteNL;
+	std::vector <int> perturbRouteNL;
 
 	// ---------------------------------------------
 
@@ -93,14 +102,6 @@ private:
 	bool move8(); // If route(U) != route(V), replace (U,X) and (V,Y) by (U,V) and (X,Y)
 
 	// General Move Functions
-	
-
-	// Intra Route Moves
-	bool reinsertion();
-	bool exchange();
-	bool oropt2();
-	bool oropt3();
-	bool twoopt();
 
 	// Inter Route Moves
 	MoveInfo getBestInterRouteMove(int moveId);
@@ -109,14 +110,38 @@ private:
 	MoveInfo shift10_sweep();
 	MoveCheck shift10_check();
 	bool shift10_do();
+
 	bool shift20();
+
 	bool shift30();
-	bool swap11();
+
+	MoveInfo swap11_sweep();
+	MoveCheck swap11_check();
+	bool swap11_do();
+
 	bool swap21();
+
 	bool swap22();
+
 	bool cross();
 
-	
+	// Intra Route Moves
+	MoveInfo getBestIntraRouteMove(int moveId);
+	bool doIntraMoveOnCurrentSolution(int moveId, MoveInfo& moveInfo);
+
+	MoveInfo reinsertion_sweep();
+	MoveCheck reinsertion_check();
+	bool reinsertion_do();
+
+	MoveCheck exchange_check();
+	bool exchange_do();
+
+	bool oropt2();
+
+	bool oropt3();
+
+	bool twoopt();
+
 	/* ROUTINES TO UPDATE THE DATA STUCTURES REPRESENTING THE SOLUTIONS */
 	static void insertNode(Node * U, Node * V);			// Solution update: Insert U after V
 	static void insertNode2(Node* U, Node* V);			// Solution update: Insert U and its next node after V
@@ -134,20 +159,27 @@ private:
 
 	/* Neighborhood Lists */
 	void populateInterRouteNL();
+	void populateIntraRouteNL();
+	void populatePerturbRouteNL();
 
 
 public:
 	// Run the local search on a given solution
 	void run(Solution & mySol);
 
+	// Run the pertubations mechanic
+	void perturb(Solution& mySol);
+
 	// Run the local search on a given solution
 	void runTests(Solution& mySol, std::string exportFile);
 	void exportTestToFile(std::vector < std::string > & results, std::string exportFile);
 	void routesToString(std::string header, std::vector < std::string >& results);
-	void prepareNodes(int nudeIdU, int nudeIdV);
+	void prepareNodes(int nodeIdU, int nodeIdV, bool isUdepot = false, bool isVdepot = false);
 
 	// Constructor
 	RVND(Params * params);
+
+	bool isPerturb = false;
 };
 
 #endif

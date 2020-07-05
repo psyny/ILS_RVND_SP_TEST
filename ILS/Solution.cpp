@@ -1,4 +1,10 @@
 #include "Solution.h" 
+#include "InsertionCriterion.h"
+#include "InsertionCriterionMCFIC.h"
+#include "InsertionCriterionNIFC.h"
+#include "InsertionStrategy.h"
+#include "InsertionStrategySIS.h"
+#include "InsertionStrategyPIS.h"
 
 // Generate an initial solution for the tests
 void Solution::initializeTestSolution()
@@ -36,6 +42,9 @@ void Solution::initializeTestSolution()
 	for (int i = firstClient; i <= lastClient; i++) {
 		sequences[2].push_back(i);
 	}
+
+	// Evaluate the resulting solution cost
+	evaluateCost();
 }
 
 // Initial Valid Solution
@@ -73,8 +82,56 @@ void Solution::initializeSweep()
 	evaluateCost();
 }
 
+void Solution::initializeSolution() {
+	do {
+		// Initialize the CL
+		std::vector<int> cl; // ToDo maybe change it to a set or a linkedlist?
+
+		// Starts from 1, ignoring the depot.
+		for (int i = 1; i < params->clients.size(); i++) {
+			cl.push_back(params->clients[i].custNum);
+		}
+
+		// Shuffle the CL list
+		std::shuffle(cl.begin(), cl.end(), params->generator);
+
+		// Each route is filled with a seed customer k, randomly selected from the CL
+		sequences = std::vector < std::vector <int> >(params->nbVehicles - 1);
+		for (int i = 0; i < params->nbVehicles - 1; i++) {
+			addClient(i, cl.back());
+			cl.pop_back();               // Removes the last element
+		}
+
+		// InsertionCriterion
+		std::uniform_int_distribution<int> dist_crit(0,1);
+		int criterion = dist_crit(params->generator);
+		InsertionCriterion* insertionCriterion;
+		if (criterion == 0) insertionCriterion = (InsertionCriterion*) new InsertionCriterionMCFIC();
+		else insertionCriterion = (InsertionCriterion*) new InsertionCriterionNIFC();
+
+		// InsertionStrategy
+		std::uniform_int_distribution<int> dist_strat(0, 1);
+		int strategy = dist_strat(params->generator);
+		InsertionStrategy* insertionStrategy;
+		if (criterion == 0) insertionStrategy = (InsertionStrategy*) new InsertionStrategySIS();
+		else insertionStrategy = (InsertionStrategy*) new InsertionStrategyPIS();
+
+		// Execute the strategy
+		insertionCriterion = (InsertionCriterion*) new InsertionCriterionMCFIC();
+		insertionStrategy = (InsertionStrategy*) new InsertionStrategySIS();
+
+
+		insertionStrategy->execute(params, this, &cl, insertionCriterion);
+
+		evaluateCost();
+	} while (!isFeasible);
+
+	return;
+}
+
 void Solution::evaluateCost()
 {
+	isFeasible = true;
 	totalDistance = 0.;
 	nbRoutes = 0;
 	double totalCapacityViolation = 0.;
@@ -95,12 +152,12 @@ void Solution::evaluateCost()
 			totalDistance += routeDistance;
 			nbRoutes++;
 			if (routeLoad > params->vehicleCapacity)
-				totalCapacityViolation += routeLoad - params->vehicleCapacity;
+				isFeasible = false;
 		}
 	}
 
 	penalizedCost = totalDistance;
-	isFeasible = (totalCapacityViolation < MY_EPSILON);
+	//isFeasible = false;
 }
 
 void Solution::exportToFile(std::string pathToSolution)
@@ -141,4 +198,16 @@ void Solution::exportToFile(std::string pathToSolution)
 	{
 		std::cout << "----- IMPOSSIBLE TO OPEN SOLUTION FILE: " << pathToSolution << " ----- " << std::endl;
 	}
+}
+
+void Solution::addClient(int routeId, int clientId) {
+	sequences[routeId].push_back(clientId);
+}
+
+void Solution::addClient(int routeId, int clientId, int pos) {
+	sequences[routeId].insert(sequences[routeId].begin() + pos, clientId);
+}
+
+std::vector<int>* Solution::getRoute(int routeId) {
+	return &sequences[routeId];
 }

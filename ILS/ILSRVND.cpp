@@ -9,33 +9,49 @@ void ILSRVND::run(Solution & mySol)
 	// Preparation 1: Estimate the number of vehicles
 	// TODO
 
+	// Preparation 2: Solutions
+	Solution currentSolution(params);
+	Solution innerBestSolution = currentSolution;
+	Solution outerBestSolution = currentSolution;
+	bool innerBestFound = false;
+	bool outerBestFound = false;
+
 	// Main Loop
-	for (int iterILS = 0; iterILS < params->maxiterILS_b; iterILS++)
+	for (int restarts = 0; restarts < params->maxStartsILS_b; restarts++)
 	{
 		// PREP 1: Generate Initial Solution
-		Solution startingSolution(params);
-		startingSolution.initializeSweep(); // TODO: Replace for a better way (implemented already by Bruno)
+		//currentSolution.initializeTestSolution(); // TODO: Replace for a better way (implemented already by Bruno)
+		currentSolution.initializeSweep(); // TODO: Replace for a better way (implemented already by Bruno)
+		innerBestSolution = currentSolution;
 
 		// STEP 2: RVND Loop
-		for (int iterRVND = 0; iterRVND < params->maxiterRVND_b; iterRVND++)
+		for (int iterILS = 0; iterILS < params->maxiterILS_b; iterILS++)
 		{
 			// STEP 2.1: Get solution from RVND
-			// TODO
+			RVND rvnd(params);
+			rvnd.run(currentSolution);
 
 			// STEP 2.2: Solution Update
-			// TODO
+			if (currentSolution.totalDistance < innerBestSolution.totalDistance || innerBestFound == false) {
+				innerBestFound = true;
+				innerBestSolution = currentSolution;
+				iterILS = 0;
+				// TODO: Vehicle update
+			}
 
 			// STEP 2.3: Perturbation 
-			// TODO
+			rvnd.perturb(currentSolution);
 		}
 
 		// STEP 3: Solution check and update
-		// TODO
+		if (innerBestSolution.totalDistance < outerBestSolution.totalDistance || outerBestFound == false) {
+			outerBestFound = true;
+			outerBestSolution = innerBestSolution;
+		}	
 	}
 
+	mySol = outerBestSolution;
 }
-
-
 
 
 ILSRVND::ILSRVND(Params * params) : params (params)

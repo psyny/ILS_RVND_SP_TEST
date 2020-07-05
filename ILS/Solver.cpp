@@ -5,9 +5,9 @@
 void Solver::runTests(std::string exportFile)
 {
 	// Init Test Solution
-	params->vehicleCapacity = 1000000000;
+	//params->vehicleCapacity = 1000000000;
 	Solution testSolution(params);
-	testSolution.initializeTestSolution();
+	testSolution.initializeSolution();
 
 	// Run tests
 	RVND rvnd = RVND(params);
@@ -30,6 +30,7 @@ void Solver::runA(Solution& finalSolution)
 void Solver::runB(Solution& finalSolution)
 {
 	Solution bestSolution(params);
+	bool bestSolutionFound = false;
 
 	// Preparations:
 	// TODO: Tolerance definition
@@ -38,34 +39,26 @@ void Solver::runB(Solution& finalSolution)
 	for (int nbIter = 0; nbIter < params->maxiter_b && clock() - params->startTime <= params->timeLimit; nbIter++)
 	{
 		// STEP 1: ILS-RVND
-		// TODO: Get a solution from the ILS-RVND
+		ILSRVND ils_rvnd(params);
+		Solution ILSsolution(params);
+		ils_rvnd.run(ILSsolution);
 
 		// STEP 2: SP
 		// TODO: Get a solution from the SP
 
 		// STEP 3: Update best solution and route pool
-		// TODO
+		if (ILSsolution.totalDistance < bestSolution.totalDistance || bestSolutionFound == false) {
+			bestSolutionFound = true;
+			bestSolution = ILSsolution;
 
-		continue;
-
-		// --------------------
-		// STEP 1: Create an initial solution
-		Solution mySolution(params);
-		mySolution.initializeSweep();
-
-		// STEP 2: Run the ILS
-
-		// ILS-
-		localSearch.run(mySolution);
-		if (mySolution.penalizedCost < bestSolution.penalizedCost)
-			bestSolution = mySolution;
-
-		// STEP 3: Run the SP
-
-
-		// Some traces
-		if (nbIter % 100 == 0) std::cout << "BEST SOLUTION: " << " | IT: " << nbIter << " | DISTANCE: " << bestSolution.totalDistance << " | COST: " << bestSolution.penalizedCost << std::endl;
+			// TODO: add routes to route pool
+		}
+		
+		// Tracking
+		if (nbIter % 2 == 0) std::cout << "BEST SOLUTION: " << " IT: " << nbIter << " | COST: " << bestSolution.totalDistance << std::endl;
 	}
+
+	// Copy the return
 	finalSolution = bestSolution;
 }
 

@@ -5,13 +5,26 @@
 // Function to check if the moves are working as intended
 void RVND::runTests(Solution& mySol, std::string exportFile)
 {
+	// Common for every test
 	loadSolution(mySol);
 	std::vector < std::string > results = std::vector < std::string >();
 	params->testRoutine = true;
-
-	// Save the state of the given solution
 	routesToString("Initial State: ", results);
 
+	exportTestToFile(results, exportFile);
+	return;
+
+	// Run main algorithm
+	if (false) {
+		run(mySol);
+
+		routesToString("Final State: ", results);
+
+		exportTestToFile(results, exportFile);
+		return;
+	}
+
+	// Random tests
 	MoveCheck moveCheck;
 	int nodeUid;
 	int nodeVid;
@@ -87,12 +100,25 @@ void RVND::runTests(Solution& mySol, std::string exportFile)
 	exportTestToFile(results, exportFile);
 }
 
-void RVND::prepareNodes(int nudeIdU, int nudeIdV)
-{
-	nodeU = &clients[nudeIdU];
+
+void RVND::prepareNodes(int nodeIdU, int nodeIdV, bool isUdepot, bool isVdepot)
+{	
+	// NODE U
+	if (isUdepot == true) {
+		nodeU = (&routes[nodeIdU])->depot;
+	}
+	else {
+		nodeU = &clients[nodeIdU];
+	}
 	setLocalVariablesRouteU();
 
-	nodeV = &clients[nudeIdV];
+	// NODE V
+	if (isVdepot == true) {
+		nodeV = (&routes[nodeIdV])->depot;
+	}
+	else {
+		nodeV = &clients[nodeIdV];
+	}
 	setLocalVariablesRouteV();
 }
 
@@ -183,13 +209,32 @@ void RVND::run(Solution & mySol)
 		int moveId = interRouteNL.back();
 
 		// Find the best solution parameters on the neighborhood
-		moveId = 0; // DEBUG: only while we dont implement all features
 		MoveInfo moveInfo = getBestInterRouteMove(moveId);
 
-		// Check if the move is good
+		// Check if the move is good enough
 		if (moveInfo.costChange <= -MY_EPSILON)
 		{
 			doInterMoveOnCurrentSolution(moveId, moveInfo);
+
+			// Intra Route Search ---------------------
+			// Much like inter route search, but simplier
+			populateIntraRouteNL();
+			while (intraRouteNL.size() > 0)
+			{
+				moveId = intraRouteNL.back();
+				moveInfo = getBestIntraRouteMove(moveId);
+				if (moveInfo.costChange <= -MY_EPSILON)
+				{
+					doIntraMoveOnCurrentSolution(moveId, moveInfo);
+				}
+				else
+				{
+					intraRouteNL.pop_back();
+				}
+			}
+			
+			// Reset NL
+			populateInterRouteNL();
 		}
 		else
 		{
@@ -197,34 +242,209 @@ void RVND::run(Solution & mySol)
 			interRouteNL.pop_back();
 		}
 
-
-
+		// UPDATE ADS
 	}
 
-	// ----------------------------------
+	// Try to empty routes
 
+	exportSolution(mySol);
+}
 
-	for (int iterILS = 0; iterILS < params->maxiterILS_b; iterILS++)
-	{
-		// PREP 1: Generate Initial Solution
-		Solution startingSolution(params);
-		startingSolution.initializeSweep(); // TODO: Replace for a better way
+void RVND::perturb(Solution& mySol)
+{
+	loadSolution(mySol);
 
-		// STEP 2: RVND Loop
-		for (int iterRVND = 0; iterRVND < params->maxiterRVND_b; iterRVND++)
-		{
-			// STEP 2.1: Get solution from RVND
-			// TODO
+	// UPDATE ADS
+	// WHY?
 
-			// STEP 2.2: Solution Update
-			// TODO
+	// Init inter route NL
+	populatePerturbRouteNL();
 
-			// STEP 2.3: Perturbation 
-			// TODO
+	// Choose a random move to create a neighborhoood (the list init is random)
+	int moveId = perturbRouteNL.back();
+
+	// Min placement location can vary with movement type (some can be inserted at a depot, some cant)
+	int minTarget = 0;
+	if (moveId == 0) minTarget = 0;
+	else minTarget = 1;
+
+	// Random moves
+	std::uniform_int_distribution<int> dist_moves(PERTURBROUTE_MIN, PERTURBROUTE_MAX);
+	int numberOfMoves = dist_moves(params->generator);
+
+	int failedMoves = 0;
+	int moveNum = 0;
+
+	while (moveNum < numberOfMoves && failedMoves < PERTURBROUTE_MAXFAILS) {
+		// Get two random routes
+		std::uniform_int_distribution<int> dist_routeU(0, routes.size() - 1);
+		int routeUid = dist_routeU(params->generator);
+
+		std::uniform_int_distribution<int> dist_routeV(0, routes.size() - 1);
+		int routeVid = dist_routeV(params->generator);
+
+		// Check if routes are valid
+		if (
+			routeUid == routeVid 
+			|| routes[routeUid].nbNodes < 2
+			|| routes[routeVid].nbNodes < 2
+		) {
+			failedMoves++;
+			continue;
 		}
 
-		// STEP 3: Solution check and update
-		// TODO
+		// Get node order in the route to get the node id
+		int node1OriginNum = 1;
+		if (routes[routeUid].nbNodes - 1 > 1) {
+			std::uniform_int_distribution<int> rand_node1Origin(1, routes[routeUid].nbNodes - 1);
+			node1OriginNum = rand_node1Origin(params->generator);
+		}
+		int node2DestinyNum = 0;
+
+		if (moveId == 0) {
+			std::uniform_int_distribution<int> rand_node2Destiny(0, routes[routeUid].nbNodes - 1);
+			node2DestinyNum = rand_node2Destiny(params->generator);
+
+			if (node1OriginNum == node2DestinyNum) {
+				node2DestinyNum--;
+			}
+		}
+
+		std::uniform_int_distribution<int> rand_node1Destiny(minTarget, routes[routeVid].nbNodes - 1);
+		int node1DestinyNum = minTarget;
+		if (routes[routeVid].nbNodes - 1 > minTarget) node1DestinyNum = rand_node1Destiny(params->generator);
+		int node2OriginNum = 0;
+
+		if (moveId == 0) {
+			
+			node2OriginNum = 1;
+			if (routes[routeVid].nbNodes - 1 > 1) {
+				std::uniform_int_distribution<int> rand_node2Origin(1, routes[routeVid].nbNodes - 1);
+				node2OriginNum = rand_node2Origin(params->generator);
+			}
+
+			//std::cout << "ID: " << node2OriginNum << std::endl;
+
+			if (node2OriginNum == node1DestinyNum) {
+				node1DestinyNum--;
+			}
+		}
+
+		#if RVND_DEBUG == true
+			std::cout << "Move ID: " << moveId << " | Nodes: U: " << routes[routeUid].nbNodes << " V: " << routes[routeVid].nbNodes << std::endl;
+			std::cout
+				<< "  No.: O1: " << node1OriginNum << " D1: " << node1DestinyNum
+				<< " O2: " << node2OriginNum << " D2: " << node2DestinyNum
+				<< " " << std::endl;
+		#endif
+
+
+		// Search for the nodes
+		Node* node;
+		int node1OriginId = -1;
+		int node1DestinyId = -1;
+		int node2OriginId = -1;
+		int node2DestinyId = -1;
+		int nodeNum;
+		bool node1DestinyIsDepot = false;
+		bool node2DestinyIsDepot = false;
+
+		if (node1OriginNum == 0)  node1OriginId = 0;
+		if (node2OriginNum == 0)  node2OriginId = 0;
+		if (node1DestinyNum == 0) {
+			node1DestinyId = 0;
+			node1DestinyIsDepot = true;
+		}
+		if (node2DestinyNum == 0) {
+			node2DestinyId = 0;
+			node2DestinyIsDepot = true;
+		}
+
+		node = depots[routeUid].next;
+		nodeNum = 1;
+		while (node1OriginId < 0 || node2DestinyId < 0 ) {
+			#if RVND_DEBUG == true
+				if (node->isDepot) {
+					std::cout << "IS DEPOT U: order: " << nodeNum << " | id: " << node->cour  <<  std::endl;
+				}
+			#endif
+
+			if (nodeNum == node1OriginNum) node1OriginId = node->cour;
+			else if (nodeNum == node2DestinyNum) node2DestinyId = node->cour;
+
+			nodeNum++;
+			node = node->next;
+		}
+
+		node = depots[routeVid].next;
+		nodeNum = 1;
+		while (node2OriginId < 0 || node1DestinyId < 0) {
+			#if RVND_DEBUG == true
+				if (node->isDepot) {
+					std::cout << "IS DEPOT V: order: " << nodeNum << " | id: " << node->cour << std::endl;
+				}
+			#endif
+
+			if (nodeNum == node2OriginNum) node2OriginId = node->cour;
+			else if (nodeNum == node1DestinyNum) node1DestinyId = node->cour;
+
+			nodeNum++;
+			node = node->next;
+		}
+
+		#if RVND_DEBUG == true
+			std::cout
+				<< "  Id.: O1: " << node1OriginId << " D1: " << node1DestinyId
+				<< " O2: " << node2OriginId << " D2: " << node2DestinyId
+				<< " " << std::endl;
+		#endif
+
+		// Apply picked move
+		MoveCheck moveCheck;
+		isPerturb = true;
+		switch (moveId) {
+		case 0:
+			// Shift(1,1)
+			prepareNodes(node1OriginId, node1DestinyId, false, node1DestinyIsDepot);
+			moveCheck = shift10_check();
+			if (moveCheck.isValid) {
+				shift10_do();
+
+				prepareNodes(node2OriginId, node2DestinyId, false, node2DestinyIsDepot);
+				moveCheck = shift10_check();
+				if (moveCheck.isValid) {
+					shift10_do();
+					moveNum;
+				}
+				else {
+					failedMoves++;
+					continue;
+				}
+			}
+			else
+			{
+				failedMoves++;
+				continue;
+			}
+			moveNum++;
+			break;
+
+		default:
+			// Swap(1,1)
+			prepareNodes(node1OriginId, node1DestinyId);
+			moveCheck = swap11_check();
+			if (moveCheck.isValid) {
+				swap11_do();
+			}
+			else
+			{
+				failedMoves++;
+				continue;
+			}
+			moveNum++;
+			break;
+		}
+
 	}
 
 	exportSolution(mySol);
@@ -383,10 +603,11 @@ void RVND::swapNode22(Node* U, Node* V)
 // Insert given Node U and its next Node X after the given Node V
 MoveCheck RVND::shift10_check()
 {
-	MoveCheck moveCheck{ false, 0 };
+	MoveCheck moveCheck;
 
 	// Check if the move is valid
 	if (nodeUCour == nodeYCour) return moveCheck;
+	if (nodeUCour == nodeVCour) return moveCheck;
 
 	// Inner load check heuristic
 	double routeUloadTransfer = params->clients[nodeUCour].demand;
@@ -516,18 +737,21 @@ bool RVND::shift30()
 	return true;
 }
 
-bool RVND::swap11()
+MoveCheck RVND::swap11_check()
 {
+	MoveCheck moveCheck;
+
 	// Check if the move is valid
-	if (nodeUCour == nodeVPredCour) return false;
-	if (nodeUCour == nodeYCour) return false;
+	if (nodeUCour == nodeVCour) return moveCheck;
+	if (nodeUCour == nodeVPredCour) return moveCheck;
+	if (nodeUCour == nodeYCour) return moveCheck;
 
 	// Inner load check heuristic
 	double routeUloadTransfer = params->clients[nodeUCour].demand;
 	double routeVloadTransfer = params->clients[nodeVCour].demand;
 
-	if (routeUloadTransfer + routeV->load - routeVloadTransfer > params->vehicleCapacity) return false;
-	if (routeVloadTransfer + routeU->load - routeUloadTransfer > params->vehicleCapacity) return false;
+	if (routeUloadTransfer + routeV->load - routeVloadTransfer > params->vehicleCapacity) return moveCheck;
+	if (routeVloadTransfer + routeU->load - routeUloadTransfer > params->vehicleCapacity) return moveCheck;
 	
 	// Costs calculations
 		// Route U
@@ -550,10 +774,14 @@ bool RVND::swap11()
 		double routeVLoss = costPredVV + costVY;
 		double routeVBalance = routeVGain - routeVLoss;
 
-	// Check if the move is worth
-	if (routeVBalance + routeUBalance > -MY_EPSILON && params->testRoutine == false) return false;
-	// TODO: Check LOAD
+	// Return Struct
+	moveCheck.isValid = true;
+	moveCheck.costChange = routeUBalance + routeVBalance;
+	return moveCheck;
+}
 
+bool RVND::swap11_do()
+{
 	// Make the move
 	swapNode(nodeU, nodeV);
 	updateRouteData(routeU);
@@ -673,14 +901,19 @@ bool RVND::cross()
 
 }
 
-// ------
+// -------------------------------------------------------------
+// MOVES: Intra-Route
+// -------------------------------------------------------------
 
-/*
-bool RVND::reinsertion()
+MoveCheck RVND::reinsertion_check()
 {
 	return shift10_check();
 }
-*/
+
+bool RVND::reinsertion_do()
+{
+	return shift10_do();
+}
 
 bool RVND::oropt2()
 {
@@ -692,9 +925,14 @@ bool RVND::oropt3()
 	return shift30();
 }
 
-bool RVND::exchange()
+MoveCheck RVND::exchange_check()
 {
-	return swap11();
+	return swap11_check();
+}
+
+bool RVND::exchange_do()
+{
+	return swap11_do();
 }
 
 bool RVND::twoopt()
@@ -890,7 +1128,7 @@ void RVND::updateRouteData(Route * myRoute)
 }
 
 // -------------------------------------------------------------
-// MOVE SWEEPS: search current solution for the best move
+// INTER MOVE SWEEPS: search current solution for the best move
 // -------------------------------------------------------------
 MoveInfo RVND::shift10_sweep()
 {
@@ -927,6 +1165,89 @@ MoveInfo RVND::shift10_sweep()
 				}
 				nU = nU->next;
 			}
+		}
+	}
+
+	return bestMoveInfo;
+}
+
+MoveInfo RVND::swap11_sweep()
+{
+	MoveCheck moveCheck;
+	MoveInfo bestMoveInfo;
+	bool firstMove = true;
+
+	for (int routeUid = 0; routeUid < routes.size() - 1; routeUid++) {
+		Route* rU = &routes[routeUid];
+		for (int routeVid = routeUid + 1; routeVid < routes.size(); routeVid++) {
+			Route* rV = &routes[routeVid];
+
+			Node* nU = depots[routeUid].next;
+			Node* nV = depots[routeVid].next;
+
+			while (!nU->isDepot)
+			{
+				while (!nV->isDepot)
+				{
+					int nodeUid = nU->cour;
+					int nodeVid = nV->cour;
+					prepareNodes(nodeUid, nodeVid);
+
+					moveCheck = swap11_check();
+					if (moveCheck.isValid == true && moveCheck.costChange < -MY_EPSILON) {
+						if (moveCheck.costChange < -MY_EPSILON || firstMove == true) {
+							firstMove = false;
+							bestMoveInfo.costChange = moveCheck.costChange;
+							bestMoveInfo.nodeUcour = nodeUid;
+							bestMoveInfo.nodeVcour = nodeVid;
+						}
+					}
+					nV = nV->next;
+				}
+				nU = nU->next;
+			}
+		}
+	}
+
+	return bestMoveInfo;
+}
+
+// -------------------------------------------------------------
+// INTRA MOVE SWEEPS: search current solution for the best move
+// -------------------------------------------------------------
+
+MoveInfo RVND::reinsertion_sweep()
+{
+	MoveCheck moveCheck;
+	MoveInfo bestMoveInfo;
+	bool firstMove = true;
+
+	for (int routeId = 0; routeId < routes.size() - 1; routeId++) {
+		Route* route = &routes[routeId];
+
+		Node* nU = depots[routeId].next;
+		while (!nU->isDepot)
+		{
+			Node* nV = nU->next;
+
+			while (!nV->isDepot)
+			{
+				int nodeUid = nU->cour;
+				int nodeVid = nV->cour;
+				prepareNodes(nodeUid, nodeVid);
+
+				moveCheck = shift10_check();
+				if (moveCheck.isValid == true && moveCheck.costChange < -MY_EPSILON) {
+					if (moveCheck.costChange < -MY_EPSILON || firstMove == true) {
+						firstMove = false;
+						bestMoveInfo.costChange = moveCheck.costChange;
+						bestMoveInfo.nodeUcour = nodeUid;
+						bestMoveInfo.nodeVcour = nodeVid;
+					}
+				}
+				nV = nV->next;
+			}
+			nU = nU->next;
 		}
 	}
 
@@ -1035,6 +1356,9 @@ MoveInfo RVND::getBestInterRouteMove(int moveId)
 		case 0:
 			return shift10_sweep();
 
+		case 1:
+			return swap11_sweep();
+
 		default:
 			return moveInfo;
 	}
@@ -1049,9 +1373,59 @@ bool RVND::doInterMoveOnCurrentSolution(int moveId, MoveInfo & moveInfo)
 	case 0:
 		return shift10_do();
 
+	case 1:
+		return swap11_do();
+
 	default:
 		return false;
 	}
 }
 
- 
+// --------------
+
+void RVND::populateIntraRouteNL()
+{
+	// Init list
+	intraRouteNL = std::vector<int>(INTRAROUTE_MOVES);
+	for (int i = 0; i < INTRAROUTE_MOVES; i++) intraRouteNL.push_back(i);
+
+	// Shuffle list
+	std::shuffle(intraRouteNL.begin(), intraRouteNL.end(), params->generator);
+}
+
+MoveInfo RVND::getBestIntraRouteMove(int moveId)
+{
+	MoveInfo moveInfo;
+	switch (moveId)
+	{
+	case 0:
+		return reinsertion_sweep();
+
+	default:
+		return moveInfo;
+	}
+}
+
+bool RVND::doIntraMoveOnCurrentSolution(int moveId, MoveInfo& moveInfo)
+{
+	prepareNodes(moveInfo.nodeUcour, moveInfo.nodeVcour);
+
+	switch (moveId)
+	{
+	case 0:
+		return reinsertion_do();
+
+	default:
+		return false;
+	}
+}
+
+void RVND::populatePerturbRouteNL()
+{
+	// Init list
+	perturbRouteNL = std::vector<int>(PERTURBROUTE_MOVES);
+	for (int i = 0; i < PERTURBROUTE_MOVES; i++) perturbRouteNL.push_back(i);
+
+	// Shuffle list
+	std::shuffle(perturbRouteNL.begin(), perturbRouteNL.end(), params->generator);
+}
