@@ -5,8 +5,8 @@
 
 #define RVND_DEBUG false
 
-#define INTERROUTE_MOVES 2
-#define INTRAROUTE_MOVES 1
+#define INTERROUTE_MOVES 5
+#define INTRAROUTE_MOVES 4
 #define PERTURBROUTE_MOVES 2
 #define PERTURBROUTE_MIN 1
 #define PERTURBROUTE_MAX 3
@@ -90,17 +90,6 @@ private:
 	// ---------------------------------------------
 
 	/* RELOCATE MOVES */
-	bool move1 (); // If U is a client node, remove U and insert it after V
-	// ...
-
-	/* SWAP MOVES */
-	bool move4(); // If U and V are client nodes, swap U and V
-	// ...
-
-	/* 2-OPT and 2-OPT* MOVES */
-	bool move7(); // If route(U) == route(V), replace (U,X) and (V,Y) by (U,V) and (X,Y)
-	bool move8(); // If route(U) != route(V), replace (U,X) and (V,Y) by (U,V) and (X,Y)
-
 	// General Move Functions
 
 	// Inter Route Moves
@@ -111,17 +100,24 @@ private:
 	MoveCheck shift10_check();
 	bool shift10_do();
 
-	bool shift20();
+	MoveInfo shift20_sweep();
+	MoveCheck shift20_check();
+	bool shift20_do();
 
-	bool shift30();
+	MoveCheck shift30_check();
+	bool shift30_do();
 
 	MoveInfo swap11_sweep();
 	MoveCheck swap11_check();
 	bool swap11_do();
 
-	bool swap21();
+	MoveInfo swap21_sweep();
+	MoveCheck swap21_check();
+	bool swap21_do();
 
-	bool swap22();
+	MoveInfo swap22_sweep();
+	MoveCheck swap22_check();
+	bool swap22_do();
 
 	bool cross();
 
@@ -133,12 +129,17 @@ private:
 	MoveCheck reinsertion_check();
 	bool reinsertion_do();
 
+	MoveInfo exchange_sweep();
 	MoveCheck exchange_check();
 	bool exchange_do();
 
-	bool oropt2();
+	MoveInfo oropt2_sweep();
+	MoveCheck oropt2_check();
+	bool oropt2_do();
 
-	bool oropt3();
+	MoveInfo oropt3_sweep();
+	MoveCheck oropt3_check();
+	bool oropt3_do();
 
 	bool twoopt();
 
@@ -146,8 +147,8 @@ private:
 	static void insertNode(Node * U, Node * V);			// Solution update: Insert U after V
 	static void insertNode2(Node* U, Node* V);			// Solution update: Insert U and its next node after V
 	static void insertNode3(Node* U, Node* V);			// Solution update: Insert U and its two next nodes after V
-	static void swapNode(Node * U, Node * V) ;			// Solution update: Swap U with V							   
-	static void swapNode2(Node * U, Node * V) ;			// Solution update: Swap (U and U->next) with V							   
+	static void swapNode11(Node * U, Node * V) ;			// Solution update: Swap U with V							   
+	static void swapNode21(Node * U, Node * V) ;			// Solution update: Swap (U and U->next) with V							   
 	static void swapNode22(Node * U, Node * V) ;		// Solution update: Swap (U and U->next) with (V and V->next)							   
 	void updateRouteData(Route * myRoute);	// Updates the preprocessed data of a route
 

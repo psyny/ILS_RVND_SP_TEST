@@ -44,7 +44,6 @@ public:
   // Get a route sequence
   std::vector<int>* getRoute(int routeId);
 
-
   // Constructor: Empty solution as a container
   Solution(Params * params): params(params)
   {
