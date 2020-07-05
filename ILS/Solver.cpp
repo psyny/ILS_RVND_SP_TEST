@@ -16,7 +16,7 @@ void Solver::runTests(std::string exportFile)
 
 void Solver::run(Solution & finalSolution)
 {
-	// TODO: Decide to run algorithm A or B for ILS-RVND-SP-b
+	// TODO: Decide to run algorithm A or B for ILS-RVND-SP
 
 	//runA(finalSolution);
 	runB(finalSolution);

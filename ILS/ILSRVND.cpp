@@ -21,7 +21,8 @@ void ILSRVND::run(Solution & mySol)
 	{
 		// PREP 1: Generate Initial Solution
 		//currentSolution.initializeTestSolution(); // TODO: Replace for a better way (implemented already by Bruno)
-		currentSolution.initializeSweep(); // TODO: Replace for a better way (implemented already by Bruno)
+		//currentSolution.initializeSweep(); // TODO: Replace for a better way (implemented already by Bruno)
+		currentSolution.initializeSolution(); // Bruno implementation
 		innerBestSolution = currentSolution;
 
 		// STEP 2: RVND Loop

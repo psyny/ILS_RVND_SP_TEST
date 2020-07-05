@@ -46,6 +46,38 @@ void RVND::runTests(Solution& mySol, std::string exportFile)
 	if (moveCheck.isValid == true) exchange_do();
 	routesToString("Swap(1,1), " + std::to_string(nodeUid) + " to " + std::to_string(nodeVid) + ": ", results);
 
+
+	// Agressive testes
+	nodeUid = 11;
+	nodeVid = 1;
+	prepareNodes(nodeUid, nodeVid, false, true);
+	moveCheck = shift10_check();
+	if (moveCheck.isValid == true) shift10_do();
+
+	nodeUid = 12;
+	nodeVid = 1;
+	prepareNodes(nodeUid, nodeVid, false, true);
+	moveCheck = shift10_check();
+	if (moveCheck.isValid == true) shift10_do();
+
+	routesToString("Tests: ", results);
+
+	nodeUid = 13;
+	nodeVid = 1;
+	prepareNodes(nodeUid, nodeVid, false, true);
+	moveCheck = shift10_check();
+	if (moveCheck.isValid == true) shift10_do();
+
+	nodeUid = 10;
+	nodeVid = 2;
+	prepareNodes(nodeUid, nodeVid, false, true);
+	moveCheck = shift10_check();
+	if (moveCheck.isValid == true) shift10_do();
+
+	routesToString("Tests: ", results);
+
+
+
 	/*
 	// Shift (2,0)
 	prepareNodes(7, 2);
@@ -159,6 +191,10 @@ void RVND::routesToString(std::string header, std::vector < std::string > & resu
 		costString = costString.substr(0, costString.find(".") + 0);
 		routeString += "  \tload: " + costString;
 
+		costString = std::to_string(node->route->nbNodes);
+		costString = costString.substr(0, costString.find(".") + 0);
+		routeString += "  \tsize: " + costString;
+
 		routeString += "]";
 
 		// Route cost
@@ -231,8 +267,10 @@ void RVND::run(Solution & mySol)
 				
 				moveInfo = getBestIntraRouteMove(moveId);
 				bool moveDone = false;
+				bool moveTryed = false;
 				if (moveInfo.costChange <= -MY_EPSILON)
 				{
+					moveTryed = true;
 					moveDone = doIntraMoveOnCurrentSolution(moveId, moveInfo);
 				}
 				if (moveDone == false) {
@@ -1176,19 +1214,27 @@ MoveInfo RVND::shift10_sweep()
 
 	for (int routeUid = 0; routeUid < routes.size() - 1; routeUid++) {
 		Route* rU = &routes[routeUid];
+		if (rU->nbNodes < 2) continue;
+
 		for (int routeVid = routeUid + 1; routeVid < routes.size(); routeVid++) {
 			Route* rV = &routes[routeVid];
 
 			Node* nU = depots[routeUid].next;
-			Node* nV = depots[routeVid].next;
+			Node* nV = &depots[routeVid];
+			bool depotTried = false;
 
 			while (!nU->isDepot)
 			{
-				while (!nV->isDepot)
+				while (!nV->isDepot || !depotTried)
 				{
+					depotTried = true;
+
 					int nodeUid = nU->cour;
 					int nodeVid = nV->cour;
-					prepareNodes(nodeUid, nodeVid);
+
+					if (nV->isDepot) nodeVid = nV->route->cour;
+	
+					prepareNodes(nodeUid, nodeVid, false, nV->isDepot);
 
 					moveCheck = shift10_check();
 					if (moveCheck.isValid == true && moveCheck.costChange < -MY_EPSILON) {
@@ -1197,6 +1243,7 @@ MoveInfo RVND::shift10_sweep()
 							bestMoveInfo.costChange = moveCheck.costChange;
 							bestMoveInfo.nodeUcour = nodeUid;
 							bestMoveInfo.nodeVcour = nodeVid;
+							bestMoveInfo.isVdepot = nV->isDepot;
 						}
 					}
 					nV = nV->next;
@@ -1650,7 +1697,7 @@ MoveInfo RVND::getBestInterRouteMove(int moveId)
 
 bool RVND::doInterMoveOnCurrentSolution(int moveId, MoveInfo & moveInfo)
 {
-	prepareNodes(moveInfo.nodeUcour, moveInfo.nodeVcour);
+	prepareNodes(moveInfo.nodeUcour, moveInfo.nodeVcour, false, moveInfo.isVdepot);
 
 	switch (moveId)
 	{

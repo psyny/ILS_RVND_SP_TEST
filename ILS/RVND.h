@@ -43,6 +43,7 @@ struct MoveInfo
 {
 	int nodeUcour{ 0 };
 	int nodeVcour{ 0 };
+	bool isVdepot{ false };
 	double costChange{ 0 };
 };
 

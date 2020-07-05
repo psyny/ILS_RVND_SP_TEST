@@ -96,8 +96,8 @@ void Solution::initializeSolution() {
 		std::shuffle(cl.begin(), cl.end(), params->generator);
 
 		// Each route is filled with a seed customer k, randomly selected from the CL
-		sequences = std::vector < std::vector <int> >(params->nbVehicles - 1);
-		for (int i = 0; i < params->nbVehicles - 1; i++) {
+		sequences = std::vector < std::vector <int> >(params->nbVehicles);
+		for (int i = 0; i < sequences.size(); i++) {
 			addClient(i, cl.back());
 			cl.pop_back();               // Removes the last element
 		}
@@ -119,7 +119,6 @@ void Solution::initializeSolution() {
 		// Execute the strategy
 		insertionCriterion = (InsertionCriterion*) new InsertionCriterionMCFIC();
 		insertionStrategy = (InsertionStrategy*) new InsertionStrategySIS();
-
 
 		insertionStrategy->execute(params, this, &cl, insertionCriterion);
 
