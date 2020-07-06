@@ -75,7 +75,7 @@ Params::Params(std::string pathToInstance, int seedRNG): seed(seedRNG)
 void Params::setMethodParams()
 {
 	// You can define some method parameters here if you wish
-	maxiter_b = 100;
-	maxiterILS_b = 2000; // How many pertubations ILS will do
+	maxiter_b = 10;
+	maxiterILS_b = 200; // How many pertubations ILS will do
 	maxStartsILS_b = 1; 
 }

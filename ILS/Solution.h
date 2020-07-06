@@ -3,6 +3,8 @@
 
 #include "Params.h"
 
+#define MAX_SOLUTION_ATTEMPTS 20
+
 class Solution
 {
 

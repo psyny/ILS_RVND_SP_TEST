@@ -5,8 +5,8 @@
 
 #define RVND_DEBUG false
 
-#define INTERROUTE_MOVES 5
-#define INTRAROUTE_MOVES 4
+#define INTERROUTE_MOVES 6
+#define INTRAROUTE_MOVES 5
 #define PERTURBROUTE_MOVES 2
 #define PERTURBROUTE_MIN 1
 #define PERTURBROUTE_MAX 3
@@ -26,6 +26,7 @@ struct Route
 	double max2load;					// Max load of a two adjacents customers on this route
 	double min3load;					// Min load of a three adjacents customers on this route
 	double max3load;					// Max load of a three adjacents customers on this route
+	double totalCost{ 0 };
 };
 
 struct Node
@@ -37,6 +38,7 @@ struct Node
 	Node * prev;						// Previous node in the route order
 	Route * route;						// Pointer towards the associated route
 	double cumulatedLoad;				// Cumulated load on this route until the customer (including itself)
+	double cumulatedCost{ 0 };
 };
 
 struct MoveInfo
@@ -120,7 +122,9 @@ private:
 	MoveCheck swap22_check();
 	bool swap22_do();
 
-	bool cross();
+	MoveInfo cross_sweep();
+	MoveCheck cross_check();
+	bool cross_do();
 
 	// Intra Route Moves
 	MoveInfo getBestIntraRouteMove(int moveId);
@@ -142,7 +146,10 @@ private:
 	MoveCheck oropt3_check();
 	bool oropt3_do();
 
-	bool twoopt();
+	MoveInfo twoopt_sweep();
+	MoveCheck twoopt_check();
+	bool twoopt_do();
+
 
 	/* ROUTINES TO UPDATE THE DATA STUCTURES REPRESENTING THE SOLUTIONS */
 	static void insertNode(Node * U, Node * V);			// Solution update: Insert U after V
@@ -150,8 +157,10 @@ private:
 	static void insertNode3(Node* U, Node* V);			// Solution update: Insert U and its two next nodes after V
 	static void swapNode11(Node * U, Node * V) ;			// Solution update: Swap U with V							   
 	static void swapNode21(Node * U, Node * V) ;			// Solution update: Swap (U and U->next) with V							   
-	static void swapNode22(Node * U, Node * V) ;		// Solution update: Swap (U and U->next) with (V and V->next)							   
-	void updateRouteData(Route * myRoute);	// Updates the preprocessed data of a route
+	static void swapNode22(Node * U, Node * V) ;			// Solution update: Swap (U and U->next) with (V and V->next)							   
+	static void crossNode(Node* U, Node* V);				// Solution update: Cross nodes: U->next = Y and V->next = X
+	static void crossNodeSameRoute(Node* U, Node* V);		// Solution update: Cross nodes: U->next = Y and V->next = X (same route)
+	void updateRouteData(Route * myRoute, bool updateNodeRouteInfo = false);	// Updates the preprocessed data of a route
 
 	// Loading an initial solution into the local search structures
 	void loadSolution(Solution & mySol);

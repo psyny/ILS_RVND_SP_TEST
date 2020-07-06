@@ -20,9 +20,11 @@ void ILSRVND::run(Solution & mySol)
 	for (int restarts = 0; restarts < params->maxStartsILS_b; restarts++)
 	{
 		// PREP 1: Generate Initial Solution
-		//currentSolution.initializeTestSolution(); // TODO: Replace for a better way (implemented already by Bruno)
-		//currentSolution.initializeSweep(); // TODO: Replace for a better way (implemented already by Bruno)
 		currentSolution.initializeSolution(); // Bruno implementation
+		if (currentSolution.isFeasible == false) {
+			currentSolution.initializeSweep();
+		}
+				
 		innerBestSolution = currentSolution;
 
 		// STEP 2: RVND Loop

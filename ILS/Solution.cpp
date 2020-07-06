@@ -83,7 +83,15 @@ void Solution::initializeSweep()
 }
 
 void Solution::initializeSolution() {
+	if (MAX_SOLUTION_ATTEMPTS == 0) {
+		isFeasible = false;
+		return;
+	}
+
+	int attempts = 0;
 	do {
+		attempts++;
+
 		// Initialize the CL
 		std::vector<int> cl; // ToDo maybe change it to a set or a linkedlist?
 
@@ -123,7 +131,7 @@ void Solution::initializeSolution() {
 		insertionStrategy->execute(params, this, &cl, insertionCriterion);
 
 		evaluateCost();
-	} while (!isFeasible);
+	} while (!isFeasible && attempts < MAX_SOLUTION_ATTEMPTS);
 
 	return;
 }

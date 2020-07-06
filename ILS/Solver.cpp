@@ -55,7 +55,7 @@ void Solver::runB(Solution& finalSolution)
 		}
 		
 		// Tracking
-		if (nbIter % 2 == 0) std::cout << "BEST SOLUTION: " << " IT: " << nbIter << " | COST: " << bestSolution.totalDistance << std::endl;
+		if (nbIter % ((int)params->maxiter_b / 5) == 0) std::cout << "BEST SOLUTION: " << " IT: " << nbIter << " | COST: " << bestSolution.totalDistance << std::endl;
 	}
 
 	// Copy the return

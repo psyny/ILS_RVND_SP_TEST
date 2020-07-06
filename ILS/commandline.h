@@ -13,6 +13,7 @@ private:
 	int cpu_time;					// Allocated CPU time
 	int seed;						// Random seed
 	bool test;						// Is Test Code?
+	bool allInstances;				// Run all registered instances
 	std::string instance_name;		// Instance path
 	std::string output_name;		// Output path
 
@@ -39,24 +40,34 @@ public:
 			cpu_time = 360;
 			seed = 0;
 			test = false;
+			allInstances = false;
 
-			for (int i = 2; i < argc; i += 2)
-			{
-				if (std::string(argv[i]) == "-t")
-					cpu_time = atoi(argv[i + 1]);
-				else if (std::string(argv[i]) == "-sol")
-					output_name = std::string(argv[i + 1]);
-				else if (std::string(argv[i]) == "-seed")
-					seed = atoi(argv[i + 1]);
-				else if (std::string(argv[i]) == "-test")
-				{
-					output_name = std::string(argv[i + 1]);
-					test = true;
+			if (argc == 2) {
+				for (int i = 1; i < argc; i += 1) {
+					if (std::string(argv[i]) == "-all") {
+						allInstances = true;
+					}
 				}
-				else
+			}
+			else {
+				for (int i = 2; i < argc; i += 2)
 				{
-					std::cout << "----- NON RECOGNIZED ARGUMENT: " << std::string(argv[i]) << std::endl;
-					command_ok = false;
+					if (std::string(argv[i]) == "-t")
+						cpu_time = atoi(argv[i + 1]);
+					else if (std::string(argv[i]) == "-sol")
+						output_name = std::string(argv[i + 1]);
+					else if (std::string(argv[i]) == "-seed")
+						seed = atoi(argv[i + 1]);
+					else if (std::string(argv[i]) == "-test")
+					{
+						output_name = std::string(argv[i + 1]);
+						test = true;
+					}
+					else
+					{
+						std::cout << "----- NON RECOGNIZED ARGUMENT: " << std::string(argv[i]) << std::endl;
+						command_ok = false;
+					}
 				}
 			}
 		}
@@ -91,6 +102,9 @@ public:
 
 	// Tests whether the commandline parameters are OK
 	bool is_valid() { return command_ok; }
+
+	// Run all instances?
+	bool is_runall() { return allInstances; }
 
 	// Run tests?
 	bool is_test() { return test; }

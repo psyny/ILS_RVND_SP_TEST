@@ -5,11 +5,16 @@
 // Function to check if the moves are working as intended
 void RVND::runTests(Solution& mySol, std::string exportFile)
 {
+	std::cout << "Running tests..." << std::endl;
+
 	// Common for every test
 	loadSolution(mySol);
+	
 	std::vector < std::string > results = std::vector < std::string >();
 	params->testRoutine = true;
 	routesToString("Initial State: ", results);
+
+	std::cout << "Pronted Initial State..." << std::endl;
 
 	// Run main algorithm
 	if (false) {
@@ -38,45 +43,52 @@ void RVND::runTests(Solution& mySol, std::string exportFile)
 	if(moveCheck.isValid == true ) shift10_do();
 	routesToString("Shift(1,0), " + std::to_string(nodeUid) + " to " + std::to_string(nodeVid) + ": ", results);
 
+	// Cross
+	nodeUid = 4;
+	nodeVid = 8;
+	prepareNodes(nodeUid, nodeVid);
+	moveCheck = cross_check();
+	if (moveCheck.isValid == true) cross_do();
+	routesToString("Cross, " + std::to_string(nodeUid) + " to " + std::to_string(nodeVid) + ": ", results);
+
+	// Fill First Route and Test other shifts
+
+	// Shift (2,0)
+	nodeUid = 7;
+	nodeVid = 3;
+	prepareNodes(nodeUid, nodeVid);
+	moveCheck = shift20_check();
+	if (moveCheck.isValid == true) shift20_do();
+	routesToString("Shift(2,0), " + std::to_string(nodeUid) + " to " + std::to_string(nodeVid) + ": ", results);
+
+	// Shift (3,0)
+	nodeUid = 8;
+	nodeVid = 3;
+	prepareNodes(nodeUid, nodeVid);
+	moveCheck = shift30_check();
+	if (moveCheck.isValid == true) shift30_do();
+	routesToString("Shift(3,0), " + std::to_string(nodeUid) + " to " + std::to_string(nodeVid) + ": ", results);
+
+
+	// ---------------------------- Intra-Route Moves
+	results.push_back("Intra-Route Moves ------------------------------------------------");
+	results.push_back("");
+
 	// Exchange (1,1)
 	nodeUid = 3;
-	nodeVid = 5;
+	nodeVid = 9;
 	prepareNodes(nodeUid, nodeVid);
 	moveCheck = exchange_check();
 	if (moveCheck.isValid == true) exchange_do();
-	routesToString("Swap(1,1), " + std::to_string(nodeUid) + " to " + std::to_string(nodeVid) + ": ", results);
+	routesToString("Exchange, " + std::to_string(nodeUid) + " to " + std::to_string(nodeVid) + ": ", results);
 
-
-	// Agressive testes
-	nodeUid = 11;
-	nodeVid = 1;
-	prepareNodes(nodeUid, nodeVid, false, true);
-	moveCheck = shift10_check();
-	if (moveCheck.isValid == true) shift10_do();
-
-	nodeUid = 12;
-	nodeVid = 1;
-	prepareNodes(nodeUid, nodeVid, false, true);
-	moveCheck = shift10_check();
-	if (moveCheck.isValid == true) shift10_do();
-
-	routesToString("Tests: ", results);
-
-	nodeUid = 13;
-	nodeVid = 1;
-	prepareNodes(nodeUid, nodeVid, false, true);
-	moveCheck = shift10_check();
-	if (moveCheck.isValid == true) shift10_do();
-
-	nodeUid = 10;
-	nodeVid = 2;
-	prepareNodes(nodeUid, nodeVid, false, true);
-	moveCheck = shift10_check();
-	if (moveCheck.isValid == true) shift10_do();
-
-	routesToString("Tests: ", results);
-
-
+	// 2-Opt (1,1)
+	nodeUid = 2;
+	nodeVid = 3;
+	prepareNodes(nodeUid, nodeVid);
+	moveCheck = twoopt_check();
+	if (moveCheck.isValid == true) twoopt_do();
+	routesToString("2 Opt, " + std::to_string(nodeUid) + " to " + std::to_string(nodeVid) + ": ", results);
 
 	/*
 	// Shift (2,0)
@@ -125,13 +137,14 @@ void RVND::runTests(Solution& mySol, std::string exportFile)
 	*/
 
 	// ---------------------------- Sweeps
+	/*
 	MoveInfo bestMoveInfo;
 	bestMoveInfo = shift10_sweep();
 	results.push_back("Best Move Info: ");
 	results.push_back("CostChange: " + std::to_string(bestMoveInfo.costChange) );
 	results.push_back("NodeUid: " + std::to_string(bestMoveInfo.nodeUcour) );
 	results.push_back("NodeVid: " + std::to_string(bestMoveInfo.nodeVcour) );
-	
+	*/
 
 	// ---------------------------- Export to external file
 	exportTestToFile(results, exportFile);
@@ -171,11 +184,9 @@ void RVND::routesToString(std::string header, std::vector < std::string > & resu
 		std::string routeString = "R" + std::to_string(r+1) + ": 0";
 
 		Node* node = depots[r].next;
-		double routeCost = params->distanceMatrix[node->prev->cour][node->cour];
 		while (!node->isDepot)
 		{
 			routeString += " " + std::to_string(node->cour);
-			routeCost += params->distanceMatrix[node->cour][node->next->cour];
 			node = node->next;
 		}
 		routeString += " 0 ";
@@ -183,7 +194,7 @@ void RVND::routesToString(std::string header, std::vector < std::string > & resu
 		// Attach more info ( Cost and Load )
 		routeString += "\t[";
 
-		costString = std::to_string(routeCost);
+		costString = std::to_string(node->route->totalCost);
 		costString = costString.substr(0, costString.find(".") + 3);
 		routeString += "cost: " + costString;
 		
@@ -201,7 +212,7 @@ void RVND::routesToString(std::string header, std::vector < std::string > & resu
 		results.push_back(routeString);
 
 		// Update total cost
-		totalCost += routeCost;
+		totalCost += node->route->totalCost;
 	}
 
 	// Register Total Cost
@@ -738,6 +749,92 @@ void RVND::swapNode22(Node* U, Node* V)
 	Y->route = RU;
 }
 
+void RVND::crossNode(Node* U, Node* V)
+{
+	// Other related nodes
+	Node* X = U->next;
+	Node* Y = V->next;
+
+	// Node swaps
+	U->next = Y;
+	V->next = X;
+
+	X->prev = V;
+	Y->prev = U;
+
+	// Depot Adjustments
+	Node* UstartDepot = U->route->depot;
+	Node* UendDepot = UstartDepot->prev;
+	Node* Ulast = UendDepot->prev;
+	Node* VstartDepot = V->route->depot;
+	Node* VendDepot = VstartDepot->prev;
+	Node* Vlast = VendDepot->prev;
+
+	Vlast->next = UendDepot;
+	Ulast->next = VendDepot;
+
+	UendDepot->prev = Vlast;
+	VendDepot->prev = Ulast;
+}
+
+void RVND::crossNodeSameRoute(Node* U, Node* V)
+{
+	// Other related nodes
+	Node* X = U->next;
+	Node* Y = V->next;
+
+	// We need to go throu a loop to invert the route... Heavy? Yes...
+	Node* currentNode = V;
+	Node* nextNode;
+	Node* prevNode = 0;
+
+	//std::cout << " ssssss " << std::endl; 
+	//std::cout << U->route->cour << " | " << U->position << " | " << V->position << std::endl; 
+
+	//std::cout << " ------ " << std::endl;
+	/*
+	Node* tNode = U->route->depot->next;
+	while (!tNode->isDepot)
+	{
+		//std::cout << " " << tNode->cour;
+		tNode = tNode->next;
+	}
+	*/
+	//std::cout << std::endl;
+
+	//std::cout << " ------ " << std::endl;
+
+	while (currentNode->cour != X->cour) {
+		//std::cout << currentNode->cour << std::endl;
+
+		nextNode = currentNode->prev;
+
+		currentNode->next = nextNode;
+		// Only updates above first iteration
+		if (currentNode->cour != V->cour) {
+			currentNode->prev = prevNode;
+		}
+		
+		// Update references
+		prevNode = currentNode;
+		currentNode = nextNode;
+	}
+
+	//std::cout << " eee " << std::endl; 
+
+	// Fix contour references
+	//std::cout << " prevNode: " << prevNode << std::endl; 
+	X->prev = prevNode;
+
+	U->next = V;
+	V->prev = U;
+
+	X->next = Y;
+	Y->prev = X;
+
+	//std::cout << " eeeeee " << std::endl; 
+}
+
 // --------------------------------------------------- MOVES
 // Insert given Node U and its next Node X after the given Node V
 MoveCheck RVND::shift10_check()
@@ -1088,9 +1185,62 @@ bool RVND::swap22_do() {
 	return true;
 }
 
-bool RVND::cross()
+MoveCheck RVND::cross_check()
 {
+	MoveCheck moveCheck;
 
+	// Check if the move will result in changes
+	if (nodeUCour == nodeVCour) return moveCheck; // Same place
+	if (nodeX->isDepot && nodeY->isDepot) return moveCheck; // Same place
+
+	// Check if the move is valid (will not break routes integrity)
+	if (nodeUCour == 0) return moveCheck; // Cannot relocate the depot
+	if (nodeVCour == 0) return moveCheck; // Cannot relocate the depot
+
+	// Inner load check heuristic
+	double routeUpreUload = nodeU->cumulatedLoad;
+	double routeUposXload = routeU->load - nodeX->cumulatedLoad + params->clients[nodeXCour].demand;
+	double routeVpreVload = nodeV->cumulatedLoad;
+	double routeVposYload = routeV->load - nodeY->cumulatedLoad + params->clients[nodeYCour].demand;
+
+	if (routeUpreUload + routeVposYload > params->vehicleCapacity) return moveCheck;
+	if (routeVpreVload + routeUposXload > params->vehicleCapacity) return moveCheck;
+
+	// Costs calculations
+		// Route U
+		double routeCostDepotToU = nodeU->cumulatedCost;
+		double routeCostXtoDepot = routeU->totalCost - nodeX->cumulatedCost;
+		double costUX = params->distanceMatrix[nodeUCour][nodeXCour];
+		double costUY = params->distanceMatrix[nodeUCour][nodeYCour];
+
+		// Route V
+		double routeCostDepotToV = nodeV->cumulatedCost;
+		double routeCostYtoDepot = routeV->totalCost - nodeY->cumulatedCost;
+		double costVY = params->distanceMatrix[nodeVCour][nodeYCour];
+		double costVX = params->distanceMatrix[nodeVCour][nodeXCour];
+
+		// Gains and Losses
+		double routeUGain = costUY + routeCostYtoDepot;
+		double routeULoss = costUX + routeCostXtoDepot;
+		double routeUBalance = routeUGain - routeULoss;
+
+		double routeVGain = costVX + routeCostXtoDepot;
+		double routeVLoss = costVY + routeCostYtoDepot;
+		double routeVBalance = routeVGain - routeVLoss;
+
+	// Return Struct
+	moveCheck.isValid = true;
+	moveCheck.costChange = routeUBalance + routeVBalance;
+	return moveCheck;
+}
+
+bool RVND::cross_do()
+{
+	// Make the move
+	crossNode(nodeU, nodeV);
+	updateRouteData(routeU, true);
+	if (routeU != routeV) updateRouteData(routeV, true);
+	return true;
 }
 
 // -------------------------------------------------------------
@@ -1137,22 +1287,62 @@ bool RVND::exchange_do()
 	return swap11_do();
 }
 
-bool RVND::twoopt()
+MoveCheck RVND::twoopt_check()
 {
-	return cross();
+	MoveCheck moveCheck;
+
+	// Check if the move will result in changes
+	if (nodeUCour == nodeVCour) return moveCheck; // Same place
+
+	// Check if the move is valid (will not break routes integrity)
+	if (nodeUCour == 0) return moveCheck; // Cannot relocate the depot
+	if (nodeVCour == 0) return moveCheck; // Cannot relocate the depot
+	if (nodeX->isDepot) return moveCheck; // Edge limit
+	if (nodeY->isDepot) return moveCheck; // Edge limit
+
+	// Move Checks by move definition
+	if (nodeU->position > nodeV->position) return moveCheck; // Out of order
+	if (nodeXCour == nodeVCour) return moveCheck; // Adjacent
+
+	// Costs calculations
+		double costUX = params->distanceMatrix[nodeUCour][nodeXCour];
+		double costVY = params->distanceMatrix[nodeVCour][nodeYCour];
+		double costUV = params->distanceMatrix[nodeUCour][nodeVCour];
+		double costXY = params->distanceMatrix[nodeXCour][nodeYCour];
+
+		// Gains and Losses
+		double gain = costUV + costXY;
+		double loss = costUX + costVY;
+		double balance = gain - loss;
+
+	// Return Struct
+	moveCheck.isValid = true;
+	moveCheck.costChange = balance;
+	return moveCheck;
+}
+
+bool RVND::twoopt_do()
+{
+	// Make the move
+	crossNodeSameRoute(nodeU, nodeV);
+	updateRouteData(routeU);
+	return true;
 }
 
 // -------------------
 
-void RVND::updateRouteData(Route * myRoute)
+void RVND::updateRouteData(Route * myRoute, bool updateNodeRouteInfo)
 {
 	int myplace = 0;
 	Node * node = myRoute->depot;
+	Node* prevNode;
 	node->position = myplace;
 	double mycharge = 0.;
 	node->cumulatedLoad = 0.;
+	node->cumulatedCost = 0.;
 
 	double thisLoad = 0;
+	double currentCost = 0;
 	double last1Load = 0; // load of previous node
 	double last2Load = 0; // load of 2 previous node
 	double sumLast2 = 0; // Sum of last 2 loads
@@ -1163,11 +1353,18 @@ void RVND::updateRouteData(Route * myRoute)
 	{
 		firstIt = false;
 		myplace++;
+		prevNode = node;
 		node = node->next;
 		node->position = myplace;
 		thisLoad = params->clients[node->cour].demand;
 		mycharge += thisLoad;
 		node->cumulatedLoad = mycharge;
+
+		if (updateNodeRouteInfo && !node->isDepot) node->route = myRoute;
+
+		// Cost updater
+		currentCost += params->distanceMatrix[prevNode->cour][node->cour];
+		node->cumulatedCost = currentCost;
 
 		// Min Max Updaters
 		if (thisLoad < myRoute->min1load || myplace == 1) myRoute->min1load = thisLoad;
@@ -1196,7 +1393,12 @@ void RVND::updateRouteData(Route * myRoute)
 		}
 	}
 
+	// Last adjustment
+	currentCost += params->distanceMatrix[prevNode->cour][node->cour];
+
+	// Route updaters
 	myRoute->load = mycharge;
+	myRoute->totalCost = currentCost;
 	myRoute->nbNodes = myplace;
 
 	if (myRoute->depot->next->isDepot) emptyRoutes.insert(myRoute->cour); // If its an empty route, store it
@@ -1264,19 +1466,27 @@ MoveInfo RVND::shift20_sweep()
 
 	for (int routeUid = 0; routeUid < routes.size() - 1; routeUid++) {
 		Route* rU = &routes[routeUid];
+		if (rU->nbNodes < 2) continue;
+
 		for (int routeVid = routeUid + 1; routeVid < routes.size(); routeVid++) {
 			Route* rV = &routes[routeVid];
 
 			Node* nU = depots[routeUid].next;
-			Node* nV = depots[routeVid].next;
+			Node* nV = &depots[routeVid];
+			bool depotTried = false;
 
 			while (!nU->isDepot)
 			{
-				while (!nV->isDepot)
+				while (!nV->isDepot || !depotTried)
 				{
+					depotTried = true;
+
 					int nodeUid = nU->cour;
 					int nodeVid = nV->cour;
-					prepareNodes(nodeUid, nodeVid);
+
+					if (nV->isDepot) nodeVid = nV->route->cour;
+
+					prepareNodes(nodeUid, nodeVid, false, nV->isDepot);
 
 					moveCheck = shift20_check();
 					if (moveCheck.isValid == true && moveCheck.costChange < -MY_EPSILON) {
@@ -1285,6 +1495,7 @@ MoveInfo RVND::shift20_sweep()
 							bestMoveInfo.costChange = moveCheck.costChange;
 							bestMoveInfo.nodeUcour = nodeUid;
 							bestMoveInfo.nodeVcour = nodeVid;
+							bestMoveInfo.isVdepot = nV->isDepot;
 						}
 					}
 					nV = nV->next;
@@ -1402,6 +1613,47 @@ MoveInfo RVND::swap22_sweep()
 					prepareNodes(nodeUid, nodeVid);
 
 					moveCheck = swap22_check();
+					if (moveCheck.isValid == true && moveCheck.costChange < -MY_EPSILON) {
+						if (moveCheck.costChange < -MY_EPSILON || firstMove == true) {
+							firstMove = false;
+							bestMoveInfo.costChange = moveCheck.costChange;
+							bestMoveInfo.nodeUcour = nodeUid;
+							bestMoveInfo.nodeVcour = nodeVid;
+						}
+					}
+					nV = nV->next;
+				}
+				nU = nU->next;
+			}
+		}
+	}
+
+	return bestMoveInfo;
+}
+
+MoveInfo RVND::cross_sweep()
+{
+	MoveCheck moveCheck;
+	MoveInfo bestMoveInfo;
+	bool firstMove = true;
+
+	for (int routeUid = 0; routeUid < routes.size() - 1; routeUid++) {
+		Route* rU = &routes[routeUid];
+		for (int routeVid = routeUid + 1; routeVid < routes.size(); routeVid++) {
+			Route* rV = &routes[routeVid];
+
+			Node* nU = depots[routeUid].next;
+			Node* nV = depots[routeVid].next;
+
+			while (!nU->isDepot)
+			{
+				while (!nV->isDepot)
+				{
+					int nodeUid = nU->cour;
+					int nodeVid = nV->cour;
+					prepareNodes(nodeUid, nodeVid);
+
+					moveCheck = cross_check();
 					if (moveCheck.isValid == true && moveCheck.costChange < -MY_EPSILON) {
 						if (moveCheck.costChange < -MY_EPSILON || firstMove == true) {
 							firstMove = false;
@@ -1576,6 +1828,44 @@ MoveInfo RVND::oropt3_sweep()
 	return bestMoveInfo;
 }
 
+MoveInfo RVND::twoopt_sweep()
+{
+	MoveCheck moveCheck;
+	MoveInfo bestMoveInfo;
+	bool firstMove = true;
+
+	for (int routeId = 0; routeId < routes.size() - 1; routeId++) {
+		Route* route = &routes[routeId];
+
+		Node* nU = depots[routeId].next;
+		while (!nU->isDepot)
+		{
+			Node* nV = nU->next;
+
+			while (!nV->isDepot)
+			{
+				int nodeUid = nU->cour;
+				int nodeVid = nV->cour;
+				prepareNodes(nodeUid, nodeVid);
+
+				moveCheck = twoopt_check();
+				if (moveCheck.isValid == true && moveCheck.costChange < -MY_EPSILON) {
+					if (moveCheck.costChange < -MY_EPSILON || firstMove == true) {
+						firstMove = false;
+						bestMoveInfo.costChange = moveCheck.costChange;
+						bestMoveInfo.nodeUcour = nodeUid;
+						bestMoveInfo.nodeVcour = nodeVid;
+					}
+				}
+				nV = nV->next;
+			}
+			nU = nU->next;
+		}
+	}
+
+	return bestMoveInfo;
+}
+
 // -------------------------------------------------------------
 // SOLUTION FUNCTIONS
 // -------------------------------------------------------------
@@ -1690,6 +1980,9 @@ MoveInfo RVND::getBestInterRouteMove(int moveId)
 		case 4:
 			return swap22_sweep();
 
+		case 5:
+			return cross_sweep();
+
 		default:
 			return moveInfo;
 	}
@@ -1715,6 +2008,9 @@ bool RVND::doInterMoveOnCurrentSolution(int moveId, MoveInfo & moveInfo)
 
 	case 4:
 		return swap22_do();
+
+	case 5:
+		return cross_do();
 
 	default:
 		return false;
@@ -1750,6 +2046,9 @@ MoveInfo RVND::getBestIntraRouteMove(int moveId)
 	case 3:
 		return oropt3_sweep();
 
+	case 4:
+		return twoopt_sweep();
+
 	default:
 		return moveInfo;
 	}
@@ -1757,7 +2056,7 @@ MoveInfo RVND::getBestIntraRouteMove(int moveId)
 
 bool RVND::doIntraMoveOnCurrentSolution(int moveId, MoveInfo& moveInfo)
 {
-	prepareNodes(moveInfo.nodeUcour, moveInfo.nodeVcour);
+	prepareNodes(moveInfo.nodeUcour, moveInfo.nodeVcour, false, moveInfo.isVdepot);
 	
 	switch (moveId)
 	{
@@ -1772,6 +2071,9 @@ bool RVND::doIntraMoveOnCurrentSolution(int moveId, MoveInfo& moveInfo)
 
 	case 3:
 		return oropt3_do();
+
+	case 4:
+		return twoopt_do();
 
 	default:
 		return false;
