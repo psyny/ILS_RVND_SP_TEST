@@ -14,6 +14,10 @@ private:
 	int seed;						// Random seed
 	bool test;						// Is Test Code?
 	bool allInstances;				// Run all registered instances
+	bool allXInstances;				// Run all X instances
+	bool allAInstances;				// Run all A instances
+	bool allCInstances;				// Run all C instances
+	bool allGInstances;				// Run all G instances
 	std::string instance_name;		// Instance path
 	std::string output_name;		// Output path
 
@@ -41,11 +45,27 @@ public:
 			seed = 0;
 			test = false;
 			allInstances = false;
+			allXInstances = false;
+			allAInstances = false;
+			allCInstances = false;
+			allGInstances = false;
 
 			if (argc == 2) {
 				for (int i = 1; i < argc; i += 1) {
 					if (std::string(argv[i]) == "-all") {
 						allInstances = true;
+					}
+					else if (std::string(argv[i]) == "-allX") {
+						allXInstances = true;
+					}
+					else if (std::string(argv[i]) == "-allA") {
+						allAInstances = true;
+					}
+					else if (std::string(argv[i]) == "-allC") {
+						allCInstances = true;
+					}
+					else if (std::string(argv[i]) == "-allG") {
+						allGInstances = true;
 					}
 				}
 			}
@@ -104,7 +124,19 @@ public:
 	bool is_valid() { return command_ok; }
 
 	// Run all instances?
-	bool is_runall() { return allInstances; }
+	bool is_all() { return allInstances; }
+
+	// Run all X instances?
+	bool is_allX() { return allXInstances; }
+
+	// Run all A instances?
+	bool is_allA() { return allAInstances; }
+
+	// Run all C instances?
+	bool is_allC() { return allCInstances; }
+
+	// Run all G instances?
+	bool is_allG() { return allGInstances; }
 
 	// Run tests?
 	bool is_test() { return test; }

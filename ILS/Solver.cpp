@@ -55,7 +55,8 @@ void Solver::runB(Solution& finalSolution)
 		}
 		
 		// Tracking
-		if (nbIter % ((int)params->maxiter_b / 5) == 0) std::cout << "BEST SOLUTION: " << " IT: " << nbIter << " | COST: " << bestSolution.totalDistance << std::endl;
+		int seconds = ((int) ((clock() - params->startTime ) / CLOCKS_PER_SEC));
+		if (nbIter % ((int)params->maxiter_b / 5) == 0) std::cout << "BEST SOLUTION: " << " IT: " << nbIter << "\t | TIME: " << seconds << "s\t | COST: " << bestSolution.totalDistance << std::endl;
 	}
 
 	// Copy the return

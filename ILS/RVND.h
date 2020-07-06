@@ -24,8 +24,6 @@ struct Route
 	double max1load;					// Max load of a single customer on this route
 	double min2load;					// Min load of a two adjacents customers on this route
 	double max2load;					// Max load of a two adjacents customers on this route
-	double min3load;					// Min load of a three adjacents customers on this route
-	double max3load;					// Max load of a three adjacents customers on this route
 	double totalCost{ 0 };
 };
 
@@ -61,9 +59,6 @@ class RVND
 private:
 	
 	Params * params ;							// Problem parameters
-	bool searchCompleted;						// Tells whether all moves have been evaluated without success
-	long long int nbMoves;					    // Number of moves applied during the local search
-	std::vector<int> orderNodes;				// Used to randomize the move evaluations in the local search
 	std::unordered_set < int > emptyRoutes;		// indices of all empty routes
 
 	/* THE SOLUTION IS REPRESENTED AS A LINKED LIST OF ELEMENTS */

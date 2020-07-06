@@ -266,6 +266,10 @@ void RVND::run(Solution & mySol)
 		// Check if the move is good enough
 		if (moveInfo.costChange <= -MY_EPSILON)
 		{
+			// Update ADS
+
+
+			// Do the move
 			doInterMoveOnCurrentSolution(moveId, moveInfo);
 
 			// Intra Route Search ---------------------
@@ -1344,9 +1348,7 @@ void RVND::updateRouteData(Route * myRoute, bool updateNodeRouteInfo)
 	double thisLoad = 0;
 	double currentCost = 0;
 	double last1Load = 0; // load of previous node
-	double last2Load = 0; // load of 2 previous node
 	double sumLast2 = 0; // Sum of last 2 loads
-	double sumLast3 = 0; // Sum of last 3 loads
 
 	bool firstIt = true;
 	while (!node->isDepot || firstIt)
@@ -1376,17 +1378,6 @@ void RVND::updateRouteData(Route * myRoute, bool updateNodeRouteInfo)
 
 			if (sumLast2 < myRoute->min2load || myplace == 2) myRoute->min2load = sumLast2;
 			if (sumLast2 > myRoute->max2load || myplace == 2) myRoute->max2load = sumLast2;
-
-			if (myplace > 2) {
-				// Last 3 min adn max
-				sumLast3 = last2Load + sumLast2;
-
-				if (sumLast3 < myRoute->min3load || myplace == 3) myRoute->min3load = sumLast3;
-				if (sumLast3 > myRoute->max3load || myplace == 3) myRoute->max3load = sumLast3;
-
-				// Update load memory
-				last2Load = last1Load;
-			}
 
 			// Update load memory
 			last1Load = thisLoad;
@@ -1418,22 +1409,34 @@ MoveInfo RVND::shift10_sweep()
 		Route* rU = &routes[routeUid];
 		if (rU->nbNodes < 2) continue;
 
-		for (int routeVid = routeUid + 1; routeVid < routes.size(); routeVid++) {
+		for (int routeVid = 0; routeVid < routes.size(); routeVid++) {
 			Route* rV = &routes[routeVid];
 
+			// Heuristic Cuts
+			if (routeVid == routeUid) continue;
+			if (rU->min1load + rV->load > params->vehicleCapacity) continue;
+
+			// ----
 			Node* nU = depots[routeUid].next;
 			Node* nV = &depots[routeVid];
 			bool depotTried = false;
 
 			while (!nU->isDepot)
 			{
+				int nodeUid = nU->cour;
+
+				// Heuristic Cuts
+				if (params->clients[nodeUid].demand + rV->load > params->vehicleCapacity) {
+					nU = nU->next;
+					continue;
+				}
+
+				// Find the best position on route V
 				while (!nV->isDepot || !depotTried)
 				{
 					depotTried = true;
 
-					int nodeUid = nU->cour;
 					int nodeVid = nV->cour;
-
 					if (nV->isDepot) nodeVid = nV->route->cour;
 	
 					prepareNodes(nodeUid, nodeVid, false, nV->isDepot);
@@ -1468,22 +1471,40 @@ MoveInfo RVND::shift20_sweep()
 		Route* rU = &routes[routeUid];
 		if (rU->nbNodes < 2) continue;
 
-		for (int routeVid = routeUid + 1; routeVid < routes.size(); routeVid++) {
+		for (int routeVid = 0; routeVid < routes.size(); routeVid++) {
 			Route* rV = &routes[routeVid];
 
+			// Heuristic Cuts
+			if (routeVid == routeUid) continue;
+			if (rU->min2load + rV->load > params->vehicleCapacity) continue;
+
+			// -------
 			Node* nU = depots[routeUid].next;
 			Node* nV = &depots[routeVid];
 			bool depotTried = false;
 
 			while (!nU->isDepot)
 			{
+				int nodeUid = nU->cour;
+
+				// Heuristic Cuts
+				if (
+					params->clients[nodeUid].demand 
+					+ params->clients[nU->next->cour].demand 
+					+ rV->load 
+					> params->vehicleCapacity
+					)
+				{
+					nU = nU->next;
+					continue;
+				};
+
+				// Find the best position on route V
 				while (!nV->isDepot || !depotTried)
 				{
 					depotTried = true;
 
-					int nodeUid = nU->cour;
 					int nodeVid = nV->cour;
-
 					if (nV->isDepot) nodeVid = nV->route->cour;
 
 					prepareNodes(nodeUid, nodeVid, false, nV->isDepot);
@@ -1519,14 +1540,31 @@ MoveInfo RVND::swap11_sweep()
 		for (int routeVid = routeUid + 1; routeVid < routes.size(); routeVid++) {
 			Route* rV = &routes[routeVid];
 
+			// Heuristic Cuts
+			if (rU->min1load - rV->max1load + rV->load > params->vehicleCapacity) continue;
+
+			// ----
 			Node* nU = depots[routeUid].next;
 			Node* nV = depots[routeVid].next;
 
 			while (!nU->isDepot)
 			{
+				int nodeUid = nU->cour;
+
+				// Heuristic Cuts
+				if (
+					params->clients[nodeUid].demand 
+					+ rV->load 
+					- rV->max1load
+					> params->vehicleCapacity)
+				{
+					nU = nU->next;
+					continue;
+				}
+
+				// Find the best position on route V
 				while (!nV->isDepot)
 				{
-					int nodeUid = nU->cour;
 					int nodeVid = nV->cour;
 					prepareNodes(nodeUid, nodeVid);
 
@@ -1557,14 +1595,34 @@ MoveInfo RVND::swap21_sweep()
 
 	for (int routeUid = 0; routeUid < routes.size() - 1; routeUid++) {
 		Route* rU = &routes[routeUid];
-		for (int routeVid = routeUid + 1; routeVid < routes.size(); routeVid++) {
+		for (int routeVid = 0; routeVid < routes.size(); routeVid++) {
 			Route* rV = &routes[routeVid];
 
+			// Heuristic Cuts
+			if (routeVid == routeUid) continue;
+			if (rU->min2load - rV->max1load + rV->load > params->vehicleCapacity) continue;
+
+			// ----
 			Node* nU = depots[routeUid].next;
 			Node* nV = depots[routeVid].next;
 
 			while (!nU->isDepot)
 			{
+				int nodeUid = nU->cour;
+
+				// Heuristic Cuts
+				if (
+					params->clients[nodeUid].demand
+					+ params->clients[nU->next->cour].demand
+					+ rV->load
+					- rV->max1load
+					> params->vehicleCapacity)
+				{
+					nU = nU->next;
+					continue;
+				}
+
+				// Find the best position on route V
 				while (!nV->isDepot)
 				{
 					int nodeUid = nU->cour;
@@ -1601,11 +1659,31 @@ MoveInfo RVND::swap22_sweep()
 		for (int routeVid = routeUid + 1; routeVid < routes.size(); routeVid++) {
 			Route* rV = &routes[routeVid];
 
+			// Heuristic Cuts
+			if (routeVid == routeUid) continue;
+			if (rU->min2load - rV->max2load + rV->load > params->vehicleCapacity) continue;
+
+			// ----
 			Node* nU = depots[routeUid].next;
 			Node* nV = depots[routeVid].next;
 
 			while (!nU->isDepot)
 			{
+				int nodeUid = nU->cour;
+
+				// Heuristic Cuts
+				if (
+					params->clients[nodeUid].demand
+					+ params->clients[nU->next->cour].demand
+					+ rV->load
+					- rV->max1load
+					> params->vehicleCapacity)
+				{
+					nU = nU->next;
+					continue;
+				}
+
+				// Find the best position on route V
 				while (!nV->isDepot)
 				{
 					int nodeUid = nU->cour;
@@ -1641,12 +1719,24 @@ MoveInfo RVND::cross_sweep()
 		Route* rU = &routes[routeUid];
 		for (int routeVid = routeUid + 1; routeVid < routes.size(); routeVid++) {
 			Route* rV = &routes[routeVid];
-
 			Node* nU = depots[routeUid].next;
 			Node* nV = depots[routeVid].next;
 
 			while (!nU->isDepot)
 			{
+				int nodeUid = nU->cour;
+
+				// Heuristic Cuts
+				if (
+					nU->cumulatedLoad
+					+ params->clients[rU->depot->prev->prev->cour].demand
+					> params->vehicleCapacity)
+				{
+					nU = nU->next;
+					continue;
+				}
+
+				// Find the best position on route V
 				while (!nV->isDepot)
 				{
 					int nodeUid = nU->cour;
@@ -1688,13 +1778,19 @@ MoveInfo RVND::reinsertion_sweep()
 		Node* nU = depots[routeId].next;
 		while (!nU->isDepot)
 		{
-			Node* nV = nU->next;
+			Node* nV = &depots[routeId];
 
-			while (!nV->isDepot)
+			bool depotTried = false;
+			while (!nV->isDepot || !depotTried)
 			{
+				depotTried = true;
+				if (nU == nV) { nV = nV->next; continue;  }
+
 				int nodeUid = nU->cour;
 				int nodeVid = nV->cour;
-				prepareNodes(nodeUid, nodeVid);
+				if (nV->isDepot) nodeVid = routeId;
+
+				prepareNodes(nodeUid, nodeVid, false, nV->isDepot);
 
 				moveCheck = reinsertion_check();
 				if (moveCheck.isValid == true && moveCheck.costChange < -MY_EPSILON) {
@@ -1703,6 +1799,7 @@ MoveInfo RVND::reinsertion_sweep()
 						bestMoveInfo.costChange = moveCheck.costChange;
 						bestMoveInfo.nodeUcour = nodeUid;
 						bestMoveInfo.nodeVcour = nodeVid;
+						bestMoveInfo.isVdepot = nV->isDepot;
 					}
 				}
 				nV = nV->next;
@@ -1730,6 +1827,8 @@ MoveInfo RVND::exchange_sweep()
 
 			while (!nV->isDepot)
 			{
+				if (nU == nV) { nV = nV->next; continue; }
+
 				int nodeUid = nU->cour;
 				int nodeVid = nV->cour;
 				prepareNodes(nodeUid, nodeVid);
@@ -1764,13 +1863,19 @@ MoveInfo RVND::oropt2_sweep()
 		Node* nU = depots[routeId].next;
 		while (!nU->isDepot)
 		{
-			Node* nV = nU->next;
+			Node* nV = &depots[routeId];
 
-			while (!nV->isDepot)
+			bool depotTried = false;
+			while (!nV->isDepot || !depotTried)
 			{
+				depotTried = true;
+				if (nU == nV) { nV = nV->next; continue; }
+
 				int nodeUid = nU->cour;
 				int nodeVid = nV->cour;
-				prepareNodes(nodeUid, nodeVid);
+				if (nV->isDepot) nodeVid = routeId;
+
+				prepareNodes(nodeUid, nodeVid, false, nV->isDepot);
 
 				moveCheck = oropt2_check();
 				if (moveCheck.isValid == true && moveCheck.costChange < -MY_EPSILON) {
@@ -1779,6 +1884,7 @@ MoveInfo RVND::oropt2_sweep()
 						bestMoveInfo.costChange = moveCheck.costChange;
 						bestMoveInfo.nodeUcour = nodeUid;
 						bestMoveInfo.nodeVcour = nodeVid;
+						bestMoveInfo.isVdepot = nV->isDepot;
 					}
 				}
 				nV = nV->next;
@@ -1802,13 +1908,19 @@ MoveInfo RVND::oropt3_sweep()
 		Node* nU = depots[routeId].next;
 		while (!nU->isDepot)
 		{
-			Node* nV = nU->next;
+			Node* nV = &depots[routeId];
 
-			while (!nV->isDepot)
+			bool depotTried = false;
+			while (!nV->isDepot || !depotTried)
 			{
+				depotTried = true;
+				if (nU == nV) { nV = nV->next; continue; }
+
 				int nodeUid = nU->cour;
 				int nodeVid = nV->cour;
-				prepareNodes(nodeUid, nodeVid);
+				if (nV->isDepot) nodeVid = routeId;
+
+				prepareNodes(nodeUid, nodeVid, false, nV->isDepot);
 
 				moveCheck = oropt3_check();
 				if (moveCheck.isValid == true && moveCheck.costChange < -MY_EPSILON) {
@@ -1817,6 +1929,7 @@ MoveInfo RVND::oropt3_sweep()
 						bestMoveInfo.costChange = moveCheck.costChange;
 						bestMoveInfo.nodeUcour = nodeUid;
 						bestMoveInfo.nodeVcour = nodeVid;
+						bestMoveInfo.isVdepot = nV->isDepot;
 					}
 				}
 				nV = nV->next;
@@ -1873,7 +1986,6 @@ MoveInfo RVND::twoopt_sweep()
 void RVND::loadSolution(Solution & mySol)
 {
 	emptyRoutes.clear();
-	nbMoves = 0;
 	for (int r = 0; r < params->nbVehicles; r++)
 	{
 		Node * myDepot = &depots[r];
@@ -1946,8 +2058,6 @@ RVND::RVND(Params * params) : params (params)
 		depotsEnd[i].isDepot = true;
 		depotsEnd[i].route = &routes[i];
 	}
-	for (int i = 1 ; i <= params->nbClients ; i++) 
-		orderNodes.push_back(i);
 }
 
 void RVND::populateInterRouteNL()
