@@ -30,7 +30,8 @@ int main(int argc, char *argv[])
 		if (c.is_runall()) {
 			// Run all listed instances
 			std::list<std::string> files({ 
-				"A-n32-k5", "A-n63-k10","X-n101-k25","X-n106-k14","X-n110-k13","X-n115-k10",
+				"A-n32-k5", "A-n63-k10",
+				"X-n101-k25","X-n106-k14","X-n110-k13","X-n115-k10",
 				"X-n120-k6","X-n125-k30","X-n129-k18","X-n134-k13","X-n139-k10","X-n143-k7",
 				"X-n148-k46","X-n153-k22","X-n157-k13","X-n162-k11","X-n167-k10","X-n172-k51",
 				"X-n176-k26","X-n181-k23","X-n186-k15","X-n190-k8","X-n195-k51","X-n200-k36",
