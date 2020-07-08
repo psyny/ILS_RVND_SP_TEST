@@ -74,7 +74,7 @@ void RVND::runTests(Solution& mySol, std::string exportFile)
 	results.push_back("Intra-Route Moves ------------------------------------------------");
 	results.push_back("");
 
-	// Exchange (1,1)
+	// Exchange 
 	nodeUid = 3;
 	nodeVid = 9;
 	prepareNodes(nodeUid, nodeVid);
@@ -82,13 +82,21 @@ void RVND::runTests(Solution& mySol, std::string exportFile)
 	if (moveCheck.isValid == true) exchange_do();
 	routesToString("Exchange, " + std::to_string(nodeUid) + " to " + std::to_string(nodeVid) + ": ", results);
 
-	// 2-Opt (1,1)
+	// 2-Opt 
 	nodeUid = 2;
 	nodeVid = 3;
 	prepareNodes(nodeUid, nodeVid);
 	moveCheck = twoopt_check();
 	if (moveCheck.isValid == true) twoopt_do();
 	routesToString("2 Opt, " + std::to_string(nodeUid) + " to " + std::to_string(nodeVid) + ": ", results);
+
+	// Exchange 
+	nodeUid = 8;
+	nodeVid = 9;
+	prepareNodes(nodeUid, nodeVid);
+	moveCheck = exchange_check();
+	if (moveCheck.isValid == true) exchange_do();
+	routesToString("Exchange, " + std::to_string(nodeUid) + " to " + std::to_string(nodeVid) + ": ", results);
 
 	/*
 	// Shift (2,0)
@@ -248,8 +256,11 @@ void RVND::run(Solution & mySol)
 {
 	loadSolution(mySol); 
 
-	// UPDATE ADS
-	// WHY?
+	// Do a small intra route optimization on entire solution
+	if (neighbStatus->hadInitialOptimization == false) {
+		neighbStatus->hadInitialOptimization = true;
+		doIntraRouteOptimizationOnSolution();
+	}
 
 	// Init inter route NL
 	populateInterRouteNL();
@@ -266,36 +277,19 @@ void RVND::run(Solution & mySol)
 		// Check if the move is good enough
 		if (moveInfo.costChange <= -MY_EPSILON)
 		{
-			// Update ADS
-
-
-			// Do the move
+			// Do the move ( ADSs will be updated)
 			doInterMoveOnCurrentSolution(moveId, moveInfo);
 
 			// Intra Route Search ---------------------
-			// Much like inter route search, but simplier
-			populateIntraRouteNL();
-			//std::cout << "Intra SSS" << std::endl;
-			while (intraRouteNL.size() > 0)
-			{
-				moveId = intraRouteNL.back();
-				
-				moveInfo = getBestIntraRouteMove(moveId);
-				bool moveDone = false;
-				bool moveTryed = false;
-				if (moveInfo.costChange <= -MY_EPSILON)
-				{
-					moveTryed = true;
-					moveDone = doIntraMoveOnCurrentSolution(moveId, moveInfo);
-				}
-				if (moveDone == false) {
-					intraRouteNL.pop_back();
-				}
-				//std::cout << "\tMove : " << moveId << " (" << moveTryed << " , " << moveDone << ") | Size: " << intraRouteNL.size() << std::endl;
-			}
-			//std::cout << "Intra EEE" << std::endl;
-			
-			
+			// Much like inter route search, but simplier xxx
+			int routeU = clients[moveInfo.nodeUcour].route->cour;
+			int routeV = 0;
+			if (moveInfo.isVdepot == true) routeV = moveInfo.nodeVcour;
+			else routeV = clients[moveInfo.nodeVcour].route->cour;
+
+			doIntraRouteOptimizationOnRoute(routeU);
+			doIntraRouteOptimizationOnRoute(routeV);
+
 			// Reset NL
 			populateInterRouteNL();
 		}
@@ -313,7 +307,7 @@ void RVND::run(Solution & mySol)
 	exportSolution(mySol);
 }
 
-void RVND::perturb(Solution& mySol)
+void RVND::perturb(Solution& mySol, bool solutionWasImproved)
 {
 	loadSolution(mySol);
 
@@ -332,13 +326,25 @@ void RVND::perturb(Solution& mySol)
 	else minTarget = 1;
 
 	// Random moves
-	std::uniform_int_distribution<int> dist_moves(PERTURBROUTE_MIN, PERTURBROUTE_MAX);
-	int numberOfMoves = dist_moves(params->generator);
+	int maxpertubations = PERTURBROUTE_MAX;
+	if (solutionWasImproved == true) maxpertubations = ((int)maxpertubations / 2);
+	int minpertubations = 1;
+	if (minpertubations > maxpertubations) minpertubations = maxpertubations;
+
+	int numberofMoves = 0;
+	if (minpertubations < maxpertubations) {
+		std::uniform_int_distribution<int> dist_moves(minpertubations, maxpertubations);
+		numberofMoves = dist_moves(params->generator);
+	}
+	else {
+		numberofMoves = minpertubations;
+	}
+
 
 	int failedMoves = 0;
 	int moveNum = 0;
 
-	while (moveNum < numberOfMoves && failedMoves < PERTURBROUTE_MAXFAILS) {
+	while (moveNum < numberofMoves && failedMoves < PERTURBROUTE_MAXFAILS) {
 		// Get two random routes
 		std::uniform_int_distribution<int> dist_routeU(0, routes.size() - 1);
 		int routeUid = dist_routeU(params->generator);
@@ -1016,10 +1022,6 @@ MoveCheck RVND::swap11_check()
 	if (nodeUCour == 0) return moveCheck; // Cannot relocate the depot
 	if (nodeVCour == 0) return moveCheck; // Cannot relocate the depot
 
-	// I dont know if these moves are to be denied
-	if (nodeXCour == nodeVCour) return moveCheck; // cannot swap adjacent? why?
-	if (nodeYCour == nodeUCour) return moveCheck; // cannot swap adjacent? why?
-
 	// Inner load check heuristic
 	double routeUloadTransfer = params->clients[nodeUCour].demand;
 	double routeVloadTransfer = params->clients[nodeVCour].demand;
@@ -1028,6 +1030,37 @@ MoveCheck RVND::swap11_check()
 	if (routeVloadTransfer + routeU->load - routeUloadTransfer > params->vehicleCapacity) return moveCheck;
 	
 	// Costs calculations
+	double routeUBalance = 0;
+	double routeVBalance = 0;
+	if (nodeXCour == nodeVCour || nodeYCour == nodeUCour)
+	{
+		// Swaping adjacent nodes, different cost
+		double routeLoss = 0;
+		double routeGain = 0;
+
+		if (nodeU->position < nodeV->position) {
+			double costPredUU = params->distanceMatrix[nodeUPredCour][nodeUCour];
+			double costVY = params->distanceMatrix[nodeVCour][nodeYCour];
+			double costPredUV = params->distanceMatrix[nodeUPredCour][nodeVCour];
+			double costUY = params->distanceMatrix[nodeUCour][nodeYCour];
+
+			routeLoss = costPredUU + costVY;
+			routeGain = costPredUV + costUY;
+		}
+		else {
+			double costPredVV = params->distanceMatrix[nodeVPredCour][nodeVCour];
+			double costUX = params->distanceMatrix[nodeUCour][nodeXCour];
+			double costPredVU = params->distanceMatrix[nodeVPredCour][nodeUCour];
+			double costVX = params->distanceMatrix[nodeVCour][nodeXCour];
+
+			routeLoss = costPredVV + costUX;
+			routeGain = costPredVU + costVX;
+		}
+		routeUBalance = routeGain - routeLoss;
+		routeVBalance = 0;
+	}
+	else
+	{
 		// Route U
 		double costPredUU = params->distanceMatrix[nodeUPredCour][nodeUCour];
 		double costUX = params->distanceMatrix[nodeUCour][nodeXCour];
@@ -1036,7 +1069,7 @@ MoveCheck RVND::swap11_check()
 
 		double routeUGain = costPredUV + costVX;
 		double routeULoss = costPredUU + costUX;
-		double routeUBalance = routeUGain - routeULoss;
+		routeUBalance = routeUGain - routeULoss;
 
 		// Route V 
 		double costPredVV = params->distanceMatrix[nodeVPredCour][nodeVCour];
@@ -1046,7 +1079,8 @@ MoveCheck RVND::swap11_check()
 
 		double routeVGain = costPredVU + costUY;
 		double routeVLoss = costPredVV + costVY;
-		double routeVBalance = routeVGain - routeVLoss;
+		routeVBalance = routeVGain - routeVLoss;
+	}
 
 	// Return Struct
 	moveCheck.isValid = true;
@@ -1056,7 +1090,6 @@ MoveCheck RVND::swap11_check()
 
 bool RVND::swap11_do()
 {
-	// Make the move
 	swapNode11(nodeU, nodeV);
 	updateRouteData(routeU);
 	if (routeU != routeV) updateRouteData(routeV);
@@ -1335,7 +1368,7 @@ bool RVND::twoopt_do()
 
 // -------------------
 
-void RVND::updateRouteData(Route * myRoute, bool updateNodeRouteInfo)
+void RVND::updateRouteData(Route * myRoute, bool updateNodeRouteInfo, bool updateStatus)
 {
 	int myplace = 0;
 	Node * node = myRoute->depot;
@@ -1394,6 +1427,11 @@ void RVND::updateRouteData(Route * myRoute, bool updateNodeRouteInfo)
 
 	if (myRoute->depot->next->isDepot) emptyRoutes.insert(myRoute->cour); // If its an empty route, store it
 	else emptyRoutes.erase(myRoute->cour); // Otherwise make sure its not part of the empty route vector
+
+	// Update ADS to check route changes
+	if (updateStatus == true) {
+		neighbStatus->routeRelatedToImprove(myRoute->cour);
+	}
 }
 
 // -------------------------------------------------------------
@@ -1404,12 +1442,20 @@ MoveInfo RVND::shift10_sweep()
 	MoveCheck moveCheck;
 	MoveInfo bestMoveInfo;
 	bool firstMove = true;
+	int moveId = 0;
 
 	for (int routeUid = 0; routeUid < routes.size() - 1; routeUid++) {
 		Route* rU = &routes[routeUid];
-		if (rU->nbNodes < 2) continue;
+		if (rU->nbNodes < 2) {
+			neighbStatus->setMoveRouteState(moveId, routeUid, false);
+			continue;
+		}
+		bool hadAnyImprovement = false;
 
 		for (int routeVid = 0; routeVid < routes.size(); routeVid++) {
+			// ADS neighborhood status check heuristic
+			if (neighbStatus->worthMoveBetween(moveId, routeUid, routeVid) == false) continue;
+
 			Route* rV = &routes[routeVid];
 
 			// Heuristic Cuts
@@ -1443,7 +1489,8 @@ MoveInfo RVND::shift10_sweep()
 
 					moveCheck = shift10_check();
 					if (moveCheck.isValid == true && moveCheck.costChange < -MY_EPSILON) {
-						if (moveCheck.costChange < -MY_EPSILON || firstMove == true) {
+						if (moveCheck.costChange < bestMoveInfo.costChange || firstMove == true) {
+							hadAnyImprovement = true;
 							firstMove = false;
 							bestMoveInfo.costChange = moveCheck.costChange;
 							bestMoveInfo.nodeUcour = nodeUid;
@@ -1456,6 +1503,8 @@ MoveInfo RVND::shift10_sweep()
 				nU = nU->next;
 			}
 		}
+
+		if (hadAnyImprovement == false) neighbStatus->setMoveRouteState(moveId, routeUid, false);
 	}
 
 	return bestMoveInfo;
@@ -1466,12 +1515,20 @@ MoveInfo RVND::shift20_sweep()
 	MoveCheck moveCheck;
 	MoveInfo bestMoveInfo;
 	bool firstMove = true;
+	int moveId = 1;
 
 	for (int routeUid = 0; routeUid < routes.size() - 1; routeUid++) {
 		Route* rU = &routes[routeUid];
-		if (rU->nbNodes < 2) continue;
+		if (rU->nbNodes < 2) {
+			neighbStatus->setMoveRouteState(moveId, routeUid, false);
+			continue;
+		}
+		bool hadAnyImprovement = false;
 
 		for (int routeVid = 0; routeVid < routes.size(); routeVid++) {
+			// ADS neighborhood status check heuristic
+			if (neighbStatus->worthMoveBetween(moveId, routeUid, routeVid) == false) continue;
+
 			Route* rV = &routes[routeVid];
 
 			// Heuristic Cuts
@@ -1511,7 +1568,8 @@ MoveInfo RVND::shift20_sweep()
 
 					moveCheck = shift20_check();
 					if (moveCheck.isValid == true && moveCheck.costChange < -MY_EPSILON) {
-						if (moveCheck.costChange < -MY_EPSILON || firstMove == true) {
+						if (moveCheck.costChange < bestMoveInfo.costChange || firstMove == true) {
+							hadAnyImprovement = true;
 							firstMove = false;
 							bestMoveInfo.costChange = moveCheck.costChange;
 							bestMoveInfo.nodeUcour = nodeUid;
@@ -1524,6 +1582,8 @@ MoveInfo RVND::shift20_sweep()
 				nU = nU->next;
 			}
 		}
+
+		if (hadAnyImprovement == false) neighbStatus->setMoveRouteState(moveId, routeUid, false);
 	}
 
 	return bestMoveInfo;
@@ -1534,10 +1594,20 @@ MoveInfo RVND::swap11_sweep()
 	MoveCheck moveCheck;
 	MoveInfo bestMoveInfo;
 	bool firstMove = true;
+	int moveId = 2;
 
 	for (int routeUid = 0; routeUid < routes.size() - 1; routeUid++) {
 		Route* rU = &routes[routeUid];
+		if (rU->nbNodes < 2) {
+			neighbStatus->setMoveRouteState(moveId, routeUid, false);
+			continue;
+		}
+		bool hadAnyImprovement = false;
+
 		for (int routeVid = routeUid + 1; routeVid < routes.size(); routeVid++) {
+			// ADS neighborhood status check heuristic
+			if (neighbStatus->worthMoveBetween(moveId, routeUid, routeVid) == false) continue;
+
 			Route* rV = &routes[routeVid];
 
 			// Heuristic Cuts
@@ -1570,7 +1640,8 @@ MoveInfo RVND::swap11_sweep()
 
 					moveCheck = swap11_check();
 					if (moveCheck.isValid == true && moveCheck.costChange < -MY_EPSILON) {
-						if (moveCheck.costChange < -MY_EPSILON || firstMove == true) {
+						if (moveCheck.costChange < bestMoveInfo.costChange || firstMove == true) {
+							hadAnyImprovement = true;
 							firstMove = false;
 							bestMoveInfo.costChange = moveCheck.costChange;
 							bestMoveInfo.nodeUcour = nodeUid;
@@ -1582,6 +1653,8 @@ MoveInfo RVND::swap11_sweep()
 				nU = nU->next;
 			}
 		}
+
+		if (hadAnyImprovement == false) neighbStatus->setMoveRouteState(moveId, routeUid, false);
 	}
 
 	return bestMoveInfo;
@@ -1592,10 +1665,21 @@ MoveInfo RVND::swap21_sweep()
 	MoveCheck moveCheck;
 	MoveInfo bestMoveInfo;
 	bool firstMove = true;
+	int moveId = 3;
 
 	for (int routeUid = 0; routeUid < routes.size() - 1; routeUid++) {
 		Route* rU = &routes[routeUid];
+		if (rU->nbNodes < 3) {
+			neighbStatus->setMoveRouteState(moveId, routeUid, false);
+			continue;
+		}
+		bool hadAnyImprovement = false;
+
+
 		for (int routeVid = 0; routeVid < routes.size(); routeVid++) {
+			// ADS neighborhood status check heuristic
+			if (neighbStatus->worthMoveBetween(moveId, routeUid, routeVid) == false) continue;
+
 			Route* rV = &routes[routeVid];
 
 			// Heuristic Cuts
@@ -1631,7 +1715,8 @@ MoveInfo RVND::swap21_sweep()
 
 					moveCheck = swap21_check();
 					if (moveCheck.isValid == true && moveCheck.costChange < -MY_EPSILON) {
-						if (moveCheck.costChange < -MY_EPSILON || firstMove == true) {
+						if (moveCheck.costChange < bestMoveInfo.costChange || firstMove == true) {
+							hadAnyImprovement = true;
 							firstMove = false;
 							bestMoveInfo.costChange = moveCheck.costChange;
 							bestMoveInfo.nodeUcour = nodeUid;
@@ -1643,6 +1728,8 @@ MoveInfo RVND::swap21_sweep()
 				nU = nU->next;
 			}
 		}
+
+		if (hadAnyImprovement == false) neighbStatus->setMoveRouteState(moveId, routeUid, false);
 	}
 
 	return bestMoveInfo;
@@ -1653,10 +1740,20 @@ MoveInfo RVND::swap22_sweep()
 	MoveCheck moveCheck;
 	MoveInfo bestMoveInfo;
 	bool firstMove = true;
+	int moveId = 4;
 
 	for (int routeUid = 0; routeUid < routes.size() - 1; routeUid++) {
 		Route* rU = &routes[routeUid];
+		if (rU->nbNodes < 3) {
+			neighbStatus->setMoveRouteState(moveId, routeUid, false);
+			continue;
+		}
+		bool hadAnyImprovement = false;
+
 		for (int routeVid = routeUid + 1; routeVid < routes.size(); routeVid++) {
+			// ADS neighborhood status check heuristic
+			if (neighbStatus->worthMoveBetween(moveId, routeUid, routeVid) == false) continue;
+
 			Route* rV = &routes[routeVid];
 
 			// Heuristic Cuts
@@ -1692,7 +1789,8 @@ MoveInfo RVND::swap22_sweep()
 
 					moveCheck = swap22_check();
 					if (moveCheck.isValid == true && moveCheck.costChange < -MY_EPSILON) {
-						if (moveCheck.costChange < -MY_EPSILON || firstMove == true) {
+						if (moveCheck.costChange < bestMoveInfo.costChange || firstMove == true) {
+							hadAnyImprovement = true;
 							firstMove = false;
 							bestMoveInfo.costChange = moveCheck.costChange;
 							bestMoveInfo.nodeUcour = nodeUid;
@@ -1704,6 +1802,8 @@ MoveInfo RVND::swap22_sweep()
 				nU = nU->next;
 			}
 		}
+
+		if (hadAnyImprovement == false) neighbStatus->setMoveRouteState(moveId, routeUid, false);
 	}
 
 	return bestMoveInfo;
@@ -1714,10 +1814,20 @@ MoveInfo RVND::cross_sweep()
 	MoveCheck moveCheck;
 	MoveInfo bestMoveInfo;
 	bool firstMove = true;
+	int moveId = 5;
 
 	for (int routeUid = 0; routeUid < routes.size() - 1; routeUid++) {
 		Route* rU = &routes[routeUid];
+		if (rU->nbNodes < 2) {
+			neighbStatus->setMoveRouteState(moveId, routeUid, false);
+			continue;
+		}
+		bool hadAnyImprovement = false;
+
 		for (int routeVid = routeUid + 1; routeVid < routes.size(); routeVid++) {
+			// ADS neighborhood status check heuristic
+			if (neighbStatus->worthMoveBetween(moveId, routeUid, routeVid) == false) continue;
+
 			Route* rV = &routes[routeVid];
 			Node* nU = depots[routeUid].next;
 			Node* nV = depots[routeVid].next;
@@ -1745,7 +1855,8 @@ MoveInfo RVND::cross_sweep()
 
 					moveCheck = cross_check();
 					if (moveCheck.isValid == true && moveCheck.costChange < -MY_EPSILON) {
-						if (moveCheck.costChange < -MY_EPSILON || firstMove == true) {
+						if (moveCheck.costChange < bestMoveInfo.costChange || firstMove == true) {
+							hadAnyImprovement = true;
 							firstMove = false;
 							bestMoveInfo.costChange = moveCheck.costChange;
 							bestMoveInfo.nodeUcour = nodeUid;
@@ -1757,6 +1868,8 @@ MoveInfo RVND::cross_sweep()
 				nU = nU->next;
 			}
 		}
+
+		if (hadAnyImprovement == false) neighbStatus->setMoveRouteState(moveId, routeUid, false);
 	}
 
 	return bestMoveInfo;
@@ -1766,7 +1879,7 @@ MoveInfo RVND::cross_sweep()
 // INTRA MOVE SWEEPS: search current solution for the best move
 // -------------------------------------------------------------
 
-MoveInfo RVND::reinsertion_sweep()
+MoveInfo RVND::reinsertion_sweep(int routeId)
 {
 	MoveCheck moveCheck;
 	MoveInfo bestMoveInfo;
@@ -1793,8 +1906,8 @@ MoveInfo RVND::reinsertion_sweep()
 				prepareNodes(nodeUid, nodeVid, false, nV->isDepot);
 
 				moveCheck = reinsertion_check();
-				if (moveCheck.isValid == true && moveCheck.costChange < -MY_EPSILON) {
-					if (moveCheck.costChange < -MY_EPSILON || firstMove == true) {
+				if (moveCheck.isValid == true && moveCheck.costChange <= -MY_EPSILON) {
+					if (moveCheck.costChange < bestMoveInfo.costChange || firstMove == true) {
 						firstMove = false;
 						bestMoveInfo.costChange = moveCheck.costChange;
 						bestMoveInfo.nodeUcour = nodeUid;
@@ -1811,169 +1924,161 @@ MoveInfo RVND::reinsertion_sweep()
 	return bestMoveInfo;
 }
 
-MoveInfo RVND::exchange_sweep()
+MoveInfo RVND::exchange_sweep(int routeId)
 {
 	MoveCheck moveCheck;
 	MoveInfo bestMoveInfo;
 	bool firstMove = true;
 
-	for (int routeId = 0; routeId < routes.size() - 1; routeId++) {
-		Route* route = &routes[routeId];
+	Route* route = &routes[routeId];
 
-		Node* nU = depots[routeId].next;
-		while (!nU->isDepot)
+	Node* nU = depots[routeId].next;
+	while (!nU->isDepot)
+	{
+		Node* nV = nU->next;
+
+		while (!nV->isDepot)
 		{
-			Node* nV = nU->next;
+			if (nU == nV) { nV = nV->next; continue; }
 
-			while (!nV->isDepot)
-			{
-				if (nU == nV) { nV = nV->next; continue; }
+			int nodeUid = nU->cour;
+			int nodeVid = nV->cour;
+			prepareNodes(nodeUid, nodeVid);
 
-				int nodeUid = nU->cour;
-				int nodeVid = nV->cour;
-				prepareNodes(nodeUid, nodeVid);
-
-				moveCheck = exchange_check();
-				if (moveCheck.isValid == true && moveCheck.costChange < -MY_EPSILON) {
-					if (moveCheck.costChange < -MY_EPSILON || firstMove == true) {
-						firstMove = false;
-						bestMoveInfo.costChange = moveCheck.costChange;
-						bestMoveInfo.nodeUcour = nodeUid;
-						bestMoveInfo.nodeVcour = nodeVid;
-					}
+			moveCheck = exchange_check();
+			if (moveCheck.isValid == true && moveCheck.costChange < -MY_EPSILON) {
+				if (moveCheck.costChange < bestMoveInfo.costChange || firstMove == true) {
+					firstMove = false;
+					bestMoveInfo.costChange = moveCheck.costChange;
+					bestMoveInfo.nodeUcour = nodeUid;
+					bestMoveInfo.nodeVcour = nodeVid;
 				}
-				nV = nV->next;
 			}
-			nU = nU->next;
+			nV = nV->next;
 		}
+		nU = nU->next;
 	}
 
 	return bestMoveInfo;
 }
 
-MoveInfo RVND::oropt2_sweep()
+MoveInfo RVND::oropt2_sweep(int routeId)
 {
 	MoveCheck moveCheck;
 	MoveInfo bestMoveInfo;
 	bool firstMove = true;
 
-	for (int routeId = 0; routeId < routes.size() - 1; routeId++) {
-		Route* route = &routes[routeId];
+	Route* route = &routes[routeId];
 
-		Node* nU = depots[routeId].next;
-		while (!nU->isDepot)
+	Node* nU = depots[routeId].next;
+	while (!nU->isDepot)
+	{
+		Node* nV = &depots[routeId];
+
+		bool depotTried = false;
+		while (!nV->isDepot || !depotTried)
 		{
-			Node* nV = &depots[routeId];
+			depotTried = true;
+			if (nU == nV) { nV = nV->next; continue; }
 
-			bool depotTried = false;
-			while (!nV->isDepot || !depotTried)
-			{
-				depotTried = true;
-				if (nU == nV) { nV = nV->next; continue; }
+			int nodeUid = nU->cour;
+			int nodeVid = nV->cour;
+			if (nV->isDepot) nodeVid = routeId;
 
-				int nodeUid = nU->cour;
-				int nodeVid = nV->cour;
-				if (nV->isDepot) nodeVid = routeId;
+			prepareNodes(nodeUid, nodeVid, false, nV->isDepot);
 
-				prepareNodes(nodeUid, nodeVid, false, nV->isDepot);
-
-				moveCheck = oropt2_check();
-				if (moveCheck.isValid == true && moveCheck.costChange < -MY_EPSILON) {
-					if (moveCheck.costChange < -MY_EPSILON || firstMove == true) {
-						firstMove = false;
-						bestMoveInfo.costChange = moveCheck.costChange;
-						bestMoveInfo.nodeUcour = nodeUid;
-						bestMoveInfo.nodeVcour = nodeVid;
-						bestMoveInfo.isVdepot = nV->isDepot;
-					}
+			moveCheck = oropt2_check();
+			if (moveCheck.isValid == true && moveCheck.costChange < -MY_EPSILON) {
+				if (moveCheck.costChange < bestMoveInfo.costChange || firstMove == true) {
+					firstMove = false;
+					bestMoveInfo.costChange = moveCheck.costChange;
+					bestMoveInfo.nodeUcour = nodeUid;
+					bestMoveInfo.nodeVcour = nodeVid;
+					bestMoveInfo.isVdepot = nV->isDepot;
 				}
-				nV = nV->next;
 			}
-			nU = nU->next;
+			nV = nV->next;
 		}
+		nU = nU->next;
 	}
 
 	return bestMoveInfo;
 }
 
-MoveInfo RVND::oropt3_sweep()
+MoveInfo RVND::oropt3_sweep(int routeId)
 {
 	MoveCheck moveCheck;
 	MoveInfo bestMoveInfo;
 	bool firstMove = true;
 
-	for (int routeId = 0; routeId < routes.size() - 1; routeId++) {
-		Route* route = &routes[routeId];
+	Route* route = &routes[routeId];
 
-		Node* nU = depots[routeId].next;
-		while (!nU->isDepot)
+	Node* nU = depots[routeId].next;
+	while (!nU->isDepot)
+	{
+		Node* nV = &depots[routeId];
+
+		bool depotTried = false;
+		while (!nV->isDepot || !depotTried)
 		{
-			Node* nV = &depots[routeId];
+			depotTried = true;
+			if (nU == nV) { nV = nV->next; continue; }
 
-			bool depotTried = false;
-			while (!nV->isDepot || !depotTried)
-			{
-				depotTried = true;
-				if (nU == nV) { nV = nV->next; continue; }
+			int nodeUid = nU->cour;
+			int nodeVid = nV->cour;
+			if (nV->isDepot) nodeVid = routeId;
 
-				int nodeUid = nU->cour;
-				int nodeVid = nV->cour;
-				if (nV->isDepot) nodeVid = routeId;
+			prepareNodes(nodeUid, nodeVid, false, nV->isDepot);
 
-				prepareNodes(nodeUid, nodeVid, false, nV->isDepot);
-
-				moveCheck = oropt3_check();
-				if (moveCheck.isValid == true && moveCheck.costChange < -MY_EPSILON) {
-					if (moveCheck.costChange < -MY_EPSILON || firstMove == true) {
-						firstMove = false;
-						bestMoveInfo.costChange = moveCheck.costChange;
-						bestMoveInfo.nodeUcour = nodeUid;
-						bestMoveInfo.nodeVcour = nodeVid;
-						bestMoveInfo.isVdepot = nV->isDepot;
-					}
+			moveCheck = oropt3_check();
+			if (moveCheck.isValid == true && moveCheck.costChange < -MY_EPSILON) {
+				if (moveCheck.costChange < bestMoveInfo.costChange || firstMove == true) {
+					firstMove = false;
+					bestMoveInfo.costChange = moveCheck.costChange;
+					bestMoveInfo.nodeUcour = nodeUid;
+					bestMoveInfo.nodeVcour = nodeVid;
+					bestMoveInfo.isVdepot = nV->isDepot;
 				}
-				nV = nV->next;
 			}
-			nU = nU->next;
+			nV = nV->next;
 		}
+		nU = nU->next;
 	}
 
 	return bestMoveInfo;
 }
 
-MoveInfo RVND::twoopt_sweep()
+MoveInfo RVND::twoopt_sweep(int routeId)
 {
 	MoveCheck moveCheck;
 	MoveInfo bestMoveInfo;
 	bool firstMove = true;
 
-	for (int routeId = 0; routeId < routes.size() - 1; routeId++) {
-		Route* route = &routes[routeId];
+	Route* route = &routes[routeId];
 
-		Node* nU = depots[routeId].next;
-		while (!nU->isDepot)
+	Node* nU = depots[routeId].next;
+	while (!nU->isDepot)
+	{
+		Node* nV = nU->next;
+
+		while (!nV->isDepot)
 		{
-			Node* nV = nU->next;
+			int nodeUid = nU->cour;
+			int nodeVid = nV->cour;
+			prepareNodes(nodeUid, nodeVid);
 
-			while (!nV->isDepot)
-			{
-				int nodeUid = nU->cour;
-				int nodeVid = nV->cour;
-				prepareNodes(nodeUid, nodeVid);
-
-				moveCheck = twoopt_check();
-				if (moveCheck.isValid == true && moveCheck.costChange < -MY_EPSILON) {
-					if (moveCheck.costChange < -MY_EPSILON || firstMove == true) {
-						firstMove = false;
-						bestMoveInfo.costChange = moveCheck.costChange;
-						bestMoveInfo.nodeUcour = nodeUid;
-						bestMoveInfo.nodeVcour = nodeVid;
-					}
+			moveCheck = twoopt_check();
+			if (moveCheck.isValid == true && moveCheck.costChange < -MY_EPSILON) {
+				if (moveCheck.costChange < bestMoveInfo.costChange || firstMove == true) {
+					firstMove = false;
+					bestMoveInfo.costChange = moveCheck.costChange;
+					bestMoveInfo.nodeUcour = nodeUid;
+					bestMoveInfo.nodeVcour = nodeVid;
 				}
-				nV = nV->next;
 			}
-			nU = nU->next;
+			nV = nV->next;
 		}
+		nU = nU->next;
 	}
 
 	return bestMoveInfo;
@@ -2015,7 +2120,7 @@ void RVND::loadSolution(Solution & mySol)
 			myDepot->next = myDepotFin;
 			myDepotFin->prev = myDepot;
 		}
-		updateRouteData(&routes[r]);
+		updateRouteData(&routes[r],false,false);
 	}
 }
 
@@ -2036,7 +2141,7 @@ void RVND::exportSolution(Solution & mySol)
 	mySol.evaluateCost();
 }
 
-RVND::RVND(Params * params) : params (params)
+RVND::RVND(Params* params, NeighbStatus * neighbStatus) : params(params) , neighbStatus(neighbStatus)
 {
 	clients = std::vector < Node >(params->nbClients + 1);
 	routes = std::vector < Route >(params->nbVehicles);
@@ -2128,6 +2233,38 @@ bool RVND::doInterMoveOnCurrentSolution(int moveId, MoveInfo & moveInfo)
 }
 
 // --------------
+void RVND::doIntraRouteOptimizationOnSolution() {
+	for (int i = 0; i < routes.size(); i++) {
+		Route* route = &routes[i];
+		if (route->nbNodes < 3) continue;
+		doIntraRouteOptimizationOnRoute(i);
+	}
+}
+
+bool RVND::doIntraRouteOptimizationOnRoute(int routeId)
+{
+	int moveId = 0;
+	MoveInfo moveInfo;
+
+	populateIntraRouteNL();
+	while (intraRouteNL.size() > 0)
+	{
+		moveId = intraRouteNL.back();
+
+		moveInfo = getBestIntraRouteMove(moveId, routeId);
+		bool moveDone = false;
+		bool moveTryed = false;
+		if (moveInfo.costChange <= -MY_EPSILON)
+		{
+			moveTryed = true;
+			moveDone = doIntraMoveOnCurrentSolution(moveId, moveInfo);
+		}
+		if (moveDone == false) {
+			intraRouteNL.pop_back();
+		}
+	}
+}
+
 
 void RVND::populateIntraRouteNL()
 {
@@ -2139,25 +2276,25 @@ void RVND::populateIntraRouteNL()
 	std::shuffle(intraRouteNL.begin(), intraRouteNL.end(), params->generator);
 }
 
-MoveInfo RVND::getBestIntraRouteMove(int moveId)
+MoveInfo RVND::getBestIntraRouteMove(int moveId, int routeId)
 {
 	MoveInfo moveInfo;
 	switch (moveId)
 	{
 	case 0:
-		return reinsertion_sweep();
+		return reinsertion_sweep(routeId);
 
 	case 1:
-		return exchange_sweep();
+		return exchange_sweep(routeId);
 
 	case 2:
-		return oropt2_sweep();
+		return oropt2_sweep(routeId);
 
 	case 3:
-		return oropt3_sweep();
+		return oropt3_sweep(routeId);
 
 	case 4:
-		return twoopt_sweep();
+		return twoopt_sweep(routeId);
 
 	default:
 		return moveInfo;

@@ -10,8 +10,8 @@ void Solver::runTests(std::string exportFile)
 	testSolution.initializeTestSolution();
 
 	// Run tests
-	RVND rvnd = RVND(params);
-	rvnd.runTests(testSolution, exportFile);
+	ILSRVND ils_rvnd(params);
+	ils_rvnd.runTests(testSolution, exportFile);
 }
 
 void Solver::run(Solution & finalSolution)

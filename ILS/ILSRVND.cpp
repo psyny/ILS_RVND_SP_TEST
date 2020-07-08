@@ -1,7 +1,16 @@
 #include "ILSRVND.h" 
 #include "RVND.h" 
+#include "NeighbStatus.h"
 
 // -----------------------------------------------------------------------------------
+
+// Algorithm run
+void ILSRVND::runTests(Solution& mySol, std::string exportFile)
+{
+	NeighbStatus neighbStatus(mySol);
+	RVND rvnd(params, &neighbStatus);
+	rvnd.runTests(mySol, exportFile);
+}
 
 // Algorithm run
 void ILSRVND::run(Solution & mySol)
@@ -27,23 +36,28 @@ void ILSRVND::run(Solution & mySol)
 				
 		innerBestSolution = currentSolution;
 
+		// PREP 2: Start Support Structure to track updates
+		NeighbStatus neighbStatus(currentSolution);
+
 		// STEP 2: RVND Loop
 		for (int iterILS = 0; iterILS < params->maxiterILS_b; iterILS++)
 		{
 			// STEP 2.1: Get solution from RVND
-			RVND rvnd(params);
+			RVND rvnd(params, &neighbStatus);
 			rvnd.run(currentSolution);
+			bool improvedOnThisStep = false;
 
 			// STEP 2.2: Solution Update
 			if (currentSolution.totalDistance < innerBestSolution.totalDistance || innerBestFound == false) {
+				improvedOnThisStep = true;
 				innerBestFound = true;
 				innerBestSolution = currentSolution;
 				iterILS = 0;
-				// TODO: Vehicle update
+				// TODO: Vehicle update 
 			}
 
 			// STEP 2.3: Perturbation 
-			rvnd.perturb(currentSolution);
+			rvnd.perturb(currentSolution, improvedOnThisStep);
 		}
 
 		// STEP 3: Solution check and update

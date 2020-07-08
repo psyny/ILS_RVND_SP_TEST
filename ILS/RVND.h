@@ -2,14 +2,14 @@
 #define RVND_H
 
 #include "Solution.h"
+#include "NeighbStatus.h"
 
 #define RVND_DEBUG false
 
 #define INTERROUTE_MOVES 6
 #define INTRAROUTE_MOVES 5
 #define PERTURBROUTE_MOVES 2
-#define PERTURBROUTE_MIN 1
-#define PERTURBROUTE_MAX 3
+#define PERTURBROUTE_MAX 8
 #define PERTURBROUTE_MAXFAILS 10
 
 struct Node;
@@ -59,6 +59,7 @@ class RVND
 private:
 	
 	Params * params ;							// Problem parameters
+	NeighbStatus* neighbStatus;					// ADS of neighborhood status
 	std::unordered_set < int > emptyRoutes;		// indices of all empty routes
 
 	/* THE SOLUTION IS REPRESENTED AS A LINKED LIST OF ELEMENTS */
@@ -122,26 +123,28 @@ private:
 	bool cross_do();
 
 	// Intra Route Moves
-	MoveInfo getBestIntraRouteMove(int moveId);
+	bool doIntraRouteOptimizationOnRoute(int routeId);
+	MoveInfo getBestIntraRouteMove(int moveId, int routeId);
 	bool doIntraMoveOnCurrentSolution(int moveId, MoveInfo& moveInfo);
+	void doIntraRouteOptimizationOnSolution();
 
-	MoveInfo reinsertion_sweep();
+	MoveInfo reinsertion_sweep(int routeId);
 	MoveCheck reinsertion_check();
 	bool reinsertion_do();
 
-	MoveInfo exchange_sweep();
+	MoveInfo exchange_sweep(int routeId);
 	MoveCheck exchange_check();
 	bool exchange_do();
 
-	MoveInfo oropt2_sweep();
+	MoveInfo oropt2_sweep(int routeId);
 	MoveCheck oropt2_check();
 	bool oropt2_do();
 
-	MoveInfo oropt3_sweep();
+	MoveInfo oropt3_sweep(int routeId);
 	MoveCheck oropt3_check();
 	bool oropt3_do();
 
-	MoveInfo twoopt_sweep();
+	MoveInfo twoopt_sweep(int routeId);
 	MoveCheck twoopt_check();
 	bool twoopt_do();
 
@@ -155,7 +158,7 @@ private:
 	static void swapNode22(Node * U, Node * V) ;			// Solution update: Swap (U and U->next) with (V and V->next)							   
 	static void crossNode(Node* U, Node* V);				// Solution update: Cross nodes: U->next = Y and V->next = X
 	static void crossNodeSameRoute(Node* U, Node* V);		// Solution update: Cross nodes: U->next = Y and V->next = X (same route)
-	void updateRouteData(Route * myRoute, bool updateNodeRouteInfo = false);	// Updates the preprocessed data of a route
+	void updateRouteData(Route * myRoute, bool updateNodeRouteInfo = false, bool updateStatus = true);	// Updates the preprocessed data of a route
 
 	// Loading an initial solution into the local search structures
 	void loadSolution(Solution & mySol);
@@ -174,7 +177,7 @@ public:
 	void run(Solution & mySol);
 
 	// Run the pertubations mechanic
-	void perturb(Solution& mySol);
+	void perturb(Solution& mySol, bool solutionWasImproved);
 
 	// Run the local search on a given solution
 	void runTests(Solution& mySol, std::string exportFile);
@@ -183,7 +186,7 @@ public:
 	void prepareNodes(int nodeIdU, int nodeIdV, bool isUdepot = false, bool isVdepot = false);
 
 	// Constructor
-	RVND(Params * params);
+	RVND(Params* params, NeighbStatus * neighbStatus);
 
 	bool isPerturb = false;
 };
